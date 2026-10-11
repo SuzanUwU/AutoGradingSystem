@@ -1,0 +1,20 @@
+# Compiled Java files
+*.class
+
+# Generated content
+output/*
+workspace/*
+classes/*
+
+# Keep empty scaffold folders in Git
+!output/.gitkeep
+!workspace/.gitkeep
+!classes/.gitkeep
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
