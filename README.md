@@ -1,40 +1,181 @@
-# CS102 Auto Grading System — Team Project Scaffold
+# CS102 Auto Grading System
 
-**This is a folder/class starter template, not a working auto-grader.** All module classes have TODO placeholders. `Main` only prints a setup message; it does not grade student submissions.
+The CS102 Auto Grading System is a Java application designed to automate the
+grading of Java programming submissions.
 
-## Run the scaffold
+The system will support submission validation, compilation, tester execution,
+score calculation, and result generation.
 
-- macOS/Linux: `bash compile.sh` then `bash run.sh`
-- Windows Command Prompt: `compile.bat` then `run.bat`
-- Java JDK required. Compile/run scripts do not install a JDK.
+## Current Progress
 
-## Proposed team allocation
+The following features are currently implemented:
 
-1. Architecture/integration: `Main`, `config`, shared `model`, overall batch coordination (add `BatchGradingService` as needed).
-2. Validation: `validation` package.
-3. Compilation/execution: `compilation`, `execution`, and compiler/execution result models.
-4. Grading: `grading` and test/question-result models.
-5. Reporting: `reporting` and student-result model.
-6. Console UI and QA: `ui` and `tests`.
+### Student ZIP Extraction
 
-Agree on method signatures, ownership of shared models, and error handling before implementation. The code in this template is deliberately empty and is not a completed solution.
+The program reads a student ZIP file from the `submissions` folder and
+extracts it into the `workspace` folder.
 
-## Project folders
+Example:
 
-- `src/autograder`: Java source organized by package.
-- `classes`: Compiled application classes; empty in the downloadable scaffold.
-- `config`: Example configuration files; configuration loading is not implemented.
-- `assessment/testers`: Add instructor-provided tester Java files.
-- `assessment/resources`: Add trusted input data and supporting class files needed for grading.
-- `submissions`: Student ZIP inputs (empty here).
-- `workspace`: Temporary extracted and grading workspaces (empty here).
-- `output`: Generated results (empty here).
-- `tests`: Add component/end-to-end tests.
-- `lib`: Optional external open-source libraries.
+```text
+submissions/
+    2023-2024-chee.teo.2022.zip
+```
 
-## Notes for the team
+### Submission Validation
 
-- Confirm the professor's expectations around `compile.sh` / `run.sh` versus Windows `.bat` scripts. Both are included as a convenience, but Windows scripts have not been tested in this Linux environment.
-- Do not store sensitive student submissions or generated results in a public repository.
-- Ensure you attribute and document AI assistance as required by the course brief.
-- Update the UML and folder structure when the team finalizes its actual implementation.
+The program currently:
+
+- Finds the `Q1`, `Q2`, and `Q3` folders.
+- Supports submissions with an additional outer folder.
+- Checks for the required Java source files.
+
+Required files:
+
+```text
+Q1/
+    Q1a.java
+    Q1b.java
+
+Q2/
+    Q2a.java
+    Q2b.java
+
+Q3/
+    Q3.java
+```
+
+For example, the following structures can be detected:
+
+```text
+Q1/
+Q2/
+Q3/
+```
+
+```text
+01400003/
+    Q1/
+    Q2/
+    Q3/
+```
+
+```text
+RenameToYourStudentID/
+    Q1/
+    Q2/
+    Q3/
+```
+
+The current program flow is:
+
+```text
+Student ZIP
+    ↓
+Extract submission
+    ↓
+Find Q1 / Q2 / Q3
+    ↓
+Check required Java files
+    ↓
+Display validation results
+```
+
+## How to Run
+
+### Requirements
+
+Make sure Java JDK is installed.
+
+Check using:
+
+```text
+java -version
+javac -version
+```
+
+### Windows
+
+1. Open Command Prompt in the project folder.
+
+2. Place one student ZIP file inside:
+
+```text
+submissions/
+```
+
+3. Compile the project:
+
+```text
+compile.bat
+```
+
+You should see:
+
+```text
+Compilation successful.
+```
+
+4. Run the project:
+
+```text
+run.bat
+```
+
+Example output:
+
+```text
+Processing: 2023-2024-chee.teo.2022.zip
+
+Extracting submission...
+Extraction successful.
+
+Searching for question folders...
+[OK] Q1 found
+    [OK] Q1a.java
+    [OK] Q1b.java
+[OK] Q2 found
+    [OK] Q2a.java
+    [OK] Q2b.java
+[OK] Q3 found
+    [OK] Q3.java
+```
+
+At the current stage, the program processes the first ZIP file found in the
+`submissions` folder. For testing, keep one ZIP file in the folder at a time.
+
+### macOS / Linux
+
+```text
+bash compile.sh
+bash run.sh
+```
+
+## Project Folders
+
+- `src/autograder` - Java source code.
+- `assessment/testers` - Instructor-provided tester files.
+- `assessment/resources` - Supporting grading files.
+- `submissions` - Student ZIP submissions.
+- `workspace` - Extracted student submissions.
+- `classes` - Compiled application classes.
+- `output` - Generated grading results.
+- `tests` - Project tests.
+
+## Next Steps
+
+The next features to be implemented include:
+
+- Copying tester files into the grading workspace.
+- Compiling student code with tester files.
+- Running tester programs.
+- Handling compilation/runtime errors and timeouts.
+- Calculating student scores.
+- Processing multiple submissions.
+- Exporting results to the provided CSV score sheet.
+
+## Notes
+
+- Do not commit student ZIP submissions to GitHub.
+- Do not commit generated `.class` files or workspace contents.
+- Update this README as new features are completed.
