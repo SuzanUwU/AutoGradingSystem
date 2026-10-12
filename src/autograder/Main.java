@@ -97,9 +97,18 @@ public class Main {
     }
 
     private static String[] getRequiredFiles(String questionName) {
-        if (questionName.equals("Q1")) return new String[] {"Q1a.java", "Q1b.java"};
-        if (questionName.equals("Q2")) return new String[] {"Q2a.java", "Q2b.java"};
-        if (questionName.equals("Q3")) return new String[] {"Q3.java"};
+        if (questionName.equals("Q1")) {
+            return new String[] {"Q1a.java", "Q1b.java"};
+        }
+
+        if (questionName.equals("Q2")) {
+            return new String[] {"Q2a.java", "Q2b.java"};
+        }
+
+        if (questionName.equals("Q3")) {
+            return new String[] {"Q3.java", "ShapeComparator.java"};
+        }
+
         return new String[0];
     }
 
