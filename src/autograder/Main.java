@@ -1,10 +1,13 @@
 package autograder;
 
+import autograder.validation.SubmissionCorrector;
 import autograder.validation.SubmissionValidator;
 import autograder.validation.ZipExtractor;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Map;
 
 public class Main {
@@ -12,95 +15,89 @@ public class Main {
     private static final String ZIP_EXTENSION = ".zip";
 
     public static void main(String[] args) {
-
         File submissionsFolder = new File("submissions");
         File workspaceFolder = new File("workspace");
 
         ZipExtractor zipExtractor = new ZipExtractor();
         SubmissionValidator validator = new SubmissionValidator();
+        SubmissionCorrector corrector = new SubmissionCorrector();
 
-        try {
-            File zipFile = findFirstZip(submissionsFolder);
+        File[] zipFiles = findZipFiles(submissionsFolder);
 
-            if (zipFile == null) {
-                System.out.println("No ZIP submission found.");
-                return;
+        if (zipFiles.length == 0) {
+            System.out.println("No ZIP submissions found.");
+            return;
+        }
+
+        System.out.println("Found " + zipFiles.length + " submission(s).");
+        System.out.println();
+
+        int completed = 0;
+        int failed = 0;
+
+        for (File zipFile : zipFiles) {
+            try {
+                processSubmission(zipFile, workspaceFolder, zipExtractor, corrector, validator);
+                completed++;
+            } catch (IOException e) {
+                failed++;
+                System.out.println("[ERROR] Could not process " + zipFile.getName() + ": " + e.getMessage());
             }
 
-            processSubmission(
-                    zipFile, workspaceFolder, zipExtractor, validator);
-
-        } catch (IOException e) {
-            System.out.println("Error: " + e.getMessage());
+            System.out.println("----------------------------------------");
         }
+
+        System.out.println("Batch processing finished.");
+        System.out.println("Completed: " + completed);
+        System.out.println("Failed: " + failed);
     }
 
-    private static void processSubmission(
-            File zipFile, File workspaceFolder,
-            ZipExtractor zipExtractor,
-            SubmissionValidator validator)
-            throws IOException {
-
+    private static void processSubmission(File zipFile, File workspaceFolder, ZipExtractor zipExtractor, SubmissionCorrector corrector, SubmissionValidator validator) throws IOException {
         String fileName = zipFile.getName();
         String submissionName = removeZipExtension(fileName);
-
+        String expectedUsername = getExpectedUsername(submissionName);
         File destination = new File(workspaceFolder, submissionName);
 
         System.out.println("Processing: " + fileName);
+        System.out.println("Expected username: " + expectedUsername);
         System.out.println();
         System.out.println("Extracting submission...");
 
         zipExtractor.extract(zipFile, destination);
-
         System.out.println("Extraction successful.");
+
+        File correctedRoot = corrector.correctStructure(destination, expectedUsername);
+
         System.out.println();
         System.out.println("Searching for question folders...");
 
-        Map<String, File> questionFolders =
-                validator.findQuestionFolders(destination);
-
+        Map<String, File> questionFolders = validator.findQuestionFolders(correctedRoot);
         displayQuestionFolders(questionFolders, validator);
     }
 
-    private static void displayQuestionFolders(
-            Map<String, File> questionFolders,
-            SubmissionValidator validator) {
-
-        for (Map.Entry<String, File> entry
-                : questionFolders.entrySet()) {
-
+    private static void displayQuestionFolders(Map<String, File> questionFolders, SubmissionValidator validator) {
+        for (Map.Entry<String, File> entry : questionFolders.entrySet()) {
             String questionName = entry.getKey();
             File questionFolder = entry.getValue();
 
             if (questionFolder == null) {
-                System.out.println(
-                        "[MISSING] " + questionName
-                        + " folder not found.");
+                System.out.println("[MISSING] " + questionName + " folder not found.");
             } else {
-                System.out.println(
-                        "[OK] " + questionName
-                        + " found: " + questionFolder.getPath());
-
-                displayRequiredFiles(
-                        questionName, questionFolder, validator);
+                System.out.println("[OK] " + questionName + " found: " + questionFolder.getPath());
+                displayRequiredFiles(questionName, questionFolder, validator);
             }
         }
     }
 
-    private static void displayRequiredFiles(
-            String questionName, File questionFolder,
-            SubmissionValidator validator) {
-
+    private static void displayRequiredFiles(String questionName, File questionFolder, SubmissionValidator validator) {
         String[] requiredFiles = getRequiredFiles(questionName);
 
         for (String fileName : requiredFiles) {
-            displayFileStatus(
-                    questionFolder, fileName, validator);
+            displayFileStatus(questionFolder, fileName, validator);
         }
     }
 
     private static String[] getRequiredFiles(String questionName) {
-
         if (questionName.equals("Q1")) {
             return new String[] {"Q1a.java", "Q1b.java"};
         }
@@ -116,10 +113,7 @@ public class Main {
         return new String[0];
     }
 
-    private static void displayFileStatus(
-            File questionFolder, String fileName,
-            SubmissionValidator validator) {
-
+    private static void displayFileStatus(File questionFolder, String fileName, SubmissionValidator validator) {
         if (validator.hasFile(questionFolder, fileName)) {
             System.out.println("    [OK] " + fileName);
         } else {
@@ -127,41 +121,30 @@ public class Main {
         }
     }
 
-    private static File findFirstZip(File submissionsFolder) {
-
-        if (!submissionsFolder.exists()) {
-            return null;
+    private static File[] findZipFiles(File submissionsFolder) {
+        if (!submissionsFolder.isDirectory()) {
+            return new File[0];
         }
 
-        File[] files = submissionsFolder.listFiles();
+        File[] files = submissionsFolder.listFiles(file -> isZipFile(file));
 
         if (files == null) {
-            return null;
+            return new File[0];
         }
 
-        for (File file : files) {
-            if (isZipFile(file)) {
-                return file;
-            }
-        }
-
-        return null;
+        Arrays.sort(files, Comparator.comparing(File::getName));
+        return files;
     }
 
     private static boolean isZipFile(File file) {
-
-        if (!file.isFile()) {
-            return false;
-        }
-
-        return file.getName().toLowerCase().endsWith(ZIP_EXTENSION);
+        return file.isFile() && file.getName().toLowerCase().endsWith(ZIP_EXTENSION);
     }
 
     private static String removeZipExtension(String fileName) {
+        return fileName.substring(0, fileName.length() - ZIP_EXTENSION.length());
+    }
 
-        int extensionLength = ZIP_EXTENSION.length();
-
-        return fileName.substring(
-                0, fileName.length() - extensionLength);
+    private static String getExpectedUsername(String submissionName) {
+        return submissionName.replaceFirst("^\\d{4}-\\d{4}-", "");
     }
 }

@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
 
 cd /d "%~dp0"
 
@@ -10,7 +10,9 @@ set "SOURCE_LIST=%TEMP%\autograder_sources_%RANDOM%_%RANDOM%.txt"
 if exist "%SOURCE_LIST%" del /q "%SOURCE_LIST%"
 
 for /r "src" %%F in (*.java) do (
-    echo %%F>>"%SOURCE_LIST%"
+    set "FILE=%%F"
+    set "FILE=!FILE:\=/!"
+    echo "!FILE!">>"%SOURCE_LIST%"
 )
 
 javac -d classes @"%SOURCE_LIST%"
