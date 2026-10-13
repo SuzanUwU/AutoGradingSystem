@@ -35,3 +35,45 @@ The program reads all `.zip` files inside the:
 
 ```text
 submissions/
+
+# How to Run
+
+## Requirements
+
+Make sure Java JDK is installed.
+
+```text
+java -version
+javac -version
+```
+
+## Windows
+
+Open Command Prompt in the project folder:
+
+```text
+cd C:\SMU\AutoGradingSystem
+```
+
+Compile:
+
+```text
+compile.bat
+```
+
+Run:
+
+```text
+run.bat
+```
+
+## macOS / Linux
+
+```text
+bash compile.sh
+bash run.sh
+```
+
+---
+
+
