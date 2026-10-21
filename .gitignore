@@ -1,10 +1,13 @@
 # Compiled Java files
 *.class
+# Trusted instructor-provided bytecode (DataException, Shape, Circle, Rectangle)
+!assessment/resources/**/*.class
 
 # Generated content
 output/*
 workspace/*
 classes/*
+test-classes/
 
 # Keep empty scaffold folders in Git
 !output/.gitkeep
