@@ -49,10 +49,53 @@ public class AutoGradingService {
         listener.onLog("Completed: " + completed);
         listener.onLog("Failed: " + failed);
     }
+
+    // for details csv
+    private String getQuestionForFile(File javaFile, File root) {
+        try {
+            String relativePath = root.toPath().relativize(javaFile.toPath()).toString().replace("\\", "/");
+            String[] parts = relativePath.split("/");
+            for (String part : parts) {
+                if (part.equalsIgnoreCase("Q1")) return "Q1";
+                if (part.equalsIgnoreCase("Q2")) return "Q2";
+                if (part.equalsIgnoreCase("Q3")) return "Q3";
+            }
+        } catch (IllegalArgumentException e) {
+            System.out.println("file not inside submission root");
+        }
+        return null;
+    }
+
+    // record header issues
+    private void recordHeaderIssues(File root, String username, SubmissionValidator validator, SubmissionState state) throws IOException {
+        ArrayList<File> allJavaFiles = new ArrayList<>();
+        collectJavaFiles(root, allJavaFiles);
+
+        for (File javaFile : allJavaFiles) {
+            String[] header = validator.getHeaderValues(javaFile);
+            String fileLabel = javaFile.getName().replace(".java", "");
+            String questionId = getQuestionForFile(javaFile, root);
+
+            if (questionId == null) {
+                continue;
+            }
+
+            if (header[0] == null || header[0].isBlank()) {
+                state.addQuestionIssue(questionId, fileLabel + " Missing Name");
+            }
+
+            if (header[1] == null || header[1].isBlank()) {
+                state.addQuestionIssue(questionId, fileLabel + " Missing Email ID");
+            } else if (!header[1].equalsIgnoreCase(username)) {
+                state.addQuestionIssue(questionId, fileLabel + " Email ID Mismatch");
+            }
+        }
+    }
+
     private SubmissionResult processSubmission(File zipFile, SubmissionState state, Consumer<String> logger) throws IOException {
         ZipExtractor zipExtractor = new ZipExtractor();
         SubmissionValidator validator = new SubmissionValidator(logger);
-        SubmissionCorrector corrector = new SubmissionCorrector(logger);
+        SubmissionCorrector corrector = new SubmissionCorrector(logger, state::addSubmissionIssue);
         String fileName = zipFile.getName();
         String submissionName = removeZipExtension(fileName);
         String expectedUsername = validator.validateAndGetUsername(zipFile);
@@ -67,8 +110,12 @@ public class AutoGradingService {
         logger.accept("\nChecking submission...");
         state.stage = Stage.VALIDATION;
         Map<String, File> questionFolders = validator.findQuestionFolders(correctedRoot);
-        displayQuestionFolders(questionFolders, validator, expectedUsername, logger);
+        displayQuestionFolders(questionFolders, validator, expectedUsername, logger, state);
         logger.accept("\nCorrecting Java headers...");
+
+        // for details csv ; check file headers
+        recordHeaderIssues(correctedRoot, expectedUsername, validator, state);
+
         state.stage = Stage.HEADERS;
         corrector.correctHeaders(correctedRoot, expectedUsername);
         state.stage = Stage.NONE;
@@ -78,7 +125,8 @@ public class AutoGradingService {
         String overallStatus = getOverallStatus(structureStatus, headerStatus);
         String details = buildDetails(zipFile, expectedUsername, correctedRoot, structureStatus, headerStatus,
                 overallStatus, inspection, state, validator);
-        return new SubmissionResult(expectedUsername, structureStatus, headerStatus, overallStatus, details);
+
+        return new SubmissionResult(expectedUsername, structureStatus, headerStatus, overallStatus, details, state.submissionIssues, state.q1Issues, state.q2Issues, state.q3Issues);
     }
     private FinalInspection inspectFinalSubmission(File root, String username, SubmissionValidator validator) throws IOException {
         FinalInspection inspection = new FinalInspection();
@@ -149,15 +197,21 @@ public class AutoGradingService {
                 + "\nOverall status: Failed"
                 + "\n\nSUBMISSION\nZIP file: " + zipFile.getName()
                 + "\n\nERROR\n" + e.getMessage();
-        return new SubmissionResult(username, "Failed", "Failed", "Failed", details);
+        return new SubmissionResult(username, "Failed", "Failed", "Failed", details, new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>());
     }
     private void displayQuestionFolders(Map<String, File> folders, SubmissionValidator validator,
-            String username, Consumer<String> logger) throws IOException {
+            String username, Consumer<String> logger, SubmissionState state) throws IOException {
         for (Map.Entry<String, File> entry : folders.entrySet()) {
             String question = entry.getKey();
             File folder = entry.getValue();
             if (folder == null) {
                 logger.accept("[MISSING] " + question + " folder not found.");
+                // record missing files for details csv
+                for (String fileName : getRequiredFiles(question)) {
+                    String questionPart = fileName.replace(".java", "");
+                    state.addQuestionIssue(questionPart, questionPart + " Missing File");
+                }
+
                 continue;
             }
             logger.accept("[OK] " + question + " found: " + folder.getPath());
@@ -165,9 +219,13 @@ public class AutoGradingService {
                 File javaFile = new File(folder, fileName);
                 if (validator.hasFile(folder, fileName)) {
                     logger.accept("    [OK] " + fileName);
-                    validator.validateHeader(javaFile, username);
+                    validator.validateHeader(javaFile, username);                    
+
                 } else {
                     logger.accept("    [MISSING] " + fileName);
+                    // to record issue for detail csv
+                    String questionPart = fileName.replace(".java", "");
+                    state.addQuestionIssue(questionPart, questionPart + " Missing File");
                 }
             }
         }
@@ -218,6 +276,37 @@ public class AutoGradingService {
         private boolean structureCorrected;
         private boolean headerCorrected;
         private final ArrayList<String> notableMessages = new ArrayList<>();
+
+        // store issues for details csv
+        private final ArrayList<String> submissionIssues = new ArrayList<>();
+        private final ArrayList<String> q1Issues = new ArrayList<>();
+        private final ArrayList<String> q2Issues = new ArrayList<>();
+        private final ArrayList<String> q3Issues = new ArrayList<>();
+
+
+        private void addSubmissionIssue(String issue) {
+            if (!submissionIssues.contains(issue)) {
+                submissionIssues.add(issue);
+            }
+        }
+
+        private void addQuestionIssue(String questionId, String issue) {
+            ArrayList<String> target;
+            if (questionId.startsWith("Q1")) {
+                target = q1Issues;
+            } else if (questionId.startsWith("Q2")) {
+                target = q2Issues;
+            } else if (questionId.startsWith("Q3")) {
+                target = q3Issues;
+            } else {
+                return;
+            }
+
+            if (!target.contains(issue)) {
+                target.add(issue);
+            }
+        }
+
         private void track(String message) {
             String text = message.trim();
             if (text.startsWith("[CORRECTED]")) {

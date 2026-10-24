@@ -8,11 +8,17 @@ import java.util.List;
 import java.util.function.Consumer;
 public class SubmissionCorrector {
     private final Consumer<String> logger;
-    public SubmissionCorrector() {
-        this(System.out::println);
-    }
+    // for details csv
+    private final Consumer<String> issueRecorder;
+
     public SubmissionCorrector(Consumer<String> logger) {
+        // this(System.out::println);
+        this(logger, null);
+    }
+
+    public SubmissionCorrector(Consumer<String> logger, Consumer<String> issueRecorder) {
         this.logger = logger == null ? System.out::println : logger;
+        this.issueRecorder = issueRecorder == null ? issue -> {} : issueRecorder;
     }
     public File correctStructure(File extractedRoot, String expectedUsername) throws IOException {
         File expectedFolder = new File(extractedRoot, expectedUsername);
@@ -28,6 +34,7 @@ public class SubmissionCorrector {
                 moveQuestionFolder(extractedRoot, expectedFolder, question);
             }
             logger.accept("[CORRECTED] Added missing username folder: " + expectedUsername);
+            issueRecorder.accept("Missing Username Folder");
             return expectedFolder;
         }
         File singleFolder = getSingleTopLevelFolder(extractedRoot);
@@ -35,6 +42,7 @@ public class SubmissionCorrector {
             String oldName = singleFolder.getName();
             Files.move(singleFolder.toPath(), expectedFolder.toPath(), StandardCopyOption.REPLACE_EXISTING);
             logger.accept("[CORRECTED] Renamed top-level folder from " + oldName + " to " + expectedUsername);
+            issueRecorder.accept("Misnamed Top-Level Folder");
             return expectedFolder;
         }
         logger.accept("[WARNING] Folder structure could not be corrected automatically.");

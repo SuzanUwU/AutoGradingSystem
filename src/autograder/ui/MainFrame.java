@@ -1,16 +1,25 @@
 package autograder.ui;
-import autograder.model.SubmissionResult;
 import autograder.service.AutoGradingService;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+import java.nio.file.Path;
+import java.nio.file.Files;
+import java.io.IOException;
+import autograder.reporting.CsvExporter;
 import java.util.regex.Pattern;
+import autograder.compilation.*;
+import autograder.execution.*;
+import autograder.grading.*;
+import autograder.model.*;
 
 public class MainFrame extends JFrame {
     private final JTextField submissionsField = new JTextField("submissions", 35);
@@ -21,6 +30,9 @@ public class MainFrame extends JFrame {
     private final JButton validateButton = new JButton("Validate Submissions");
     private final JButton startGradingButton = new JButton("Start Grading");
     private final JButton exportButton = new JButton("Export Results");
+    private final JButton manualButton = new JButton("Enter Manual Score");
+    private boolean busy;
+    private final ArrayList<StudentResult> studentResults = new ArrayList<>();
     private final JButton clearLogButton = new JButton("Clear Log");
     private final JLabel totalLabel = new JLabel("Total: 0");
     private final JLabel validLabel = new JLabel("Valid: 0");
@@ -33,7 +45,6 @@ public class MainFrame extends JFrame {
     private final DefaultTableModel tableModel;
     private final JTable resultTable;
     private final TableRowSorter<DefaultTableModel> sorter;
-    private final ArrayList<SubmissionResult> results = new ArrayList<>();
     
     public MainFrame() {
         setTitle("CS102 Auto Grading System");
@@ -41,7 +52,7 @@ public class MainFrame extends JFrame {
         setMinimumSize(new Dimension(1050, 680));
         setSize(1200, 760);
         setLocationRelativeTo(null);
-        tableModel = new DefaultTableModel(new Object[] {"Student", "Structure", "Headers", "Status"}, 0) {
+        tableModel = new DefaultTableModel(new Object[] {"Student", "Structure", "Headers", "Status", "Grading", "Final Total"}, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false;
@@ -49,6 +60,7 @@ public class MainFrame extends JFrame {
         };
         resultTable = new JTable(tableModel);
         sorter = new TableRowSorter<>(tableModel);
+        sorter.setSortsOnUpdates(true);
         resultTable.setRowSorter(sorter);
         buildInterface();
         connectActions();
@@ -94,6 +106,8 @@ public class MainFrame extends JFrame {
         buttonPanel.add(validateButton);
         buttonPanel.add(startGradingButton);
         buttonPanel.add(exportButton);
+        buttonPanel.add(manualButton);
+        manualButton.setEnabled(false);
         startGradingButton.setEnabled(false);
         exportButton.setEnabled(false);
         gbc.gridx = 0;
@@ -106,7 +120,7 @@ public class MainFrame extends JFrame {
     }
     private JPanel createSummaryPanel() {
         JPanel panel = new JPanel(new GridLayout(1, 5, 8, 0));
-        panel.setBorder(BorderFactory.createTitledBorder("Validation Summary"));
+        panel.setBorder(BorderFactory.createTitledBorder("Submission Summary"));
         for (JLabel label : new JLabel[] {totalLabel, validLabel, correctedLabel, reviewLabel, failedLabel}) {
             label.setHorizontalAlignment(JLabel.CENTER);
             label.setFont(label.getFont().deriveFont(Font.BOLD, 15f));
@@ -132,10 +146,6 @@ public class MainFrame extends JFrame {
         resultTable.setRowHeight(25);
         resultTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         resultTable.getColumnModel().getColumn(0).setPreferredWidth(220);
-        StatusRenderer renderer = new StatusRenderer();
-        for (int column = 1; column <= 3; column++) {
-            resultTable.getColumnModel().getColumn(column).setCellRenderer(renderer);
-        }
         JPanel tablePanel = new JPanel(new BorderLayout());
         tablePanel.setBorder(BorderFactory.createTitledBorder("Students"));
         tablePanel.add(new JScrollPane(resultTable), BorderLayout.CENTER);
@@ -174,6 +184,9 @@ public class MainFrame extends JFrame {
         resultTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) showSelectedStudent();
         });
+        startGradingButton.addActionListener(e -> startGrading());
+        manualButton.addActionListener(e -> enterManualScore());
+        exportButton.addActionListener(e -> exportResults());
     }
     private void chooseSubmissionsFolder() {
         JFileChooser chooser = new JFileChooser(new File(submissionsField.getText()));
@@ -190,13 +203,18 @@ public class MainFrame extends JFrame {
                     "Invalid Folder", JOptionPane.ERROR_MESSAGE);
             return;
         }
-        results.clear();
+        if (studentResults.stream().anyMatch(StudentResult::hasManualScores)
+                && JOptionPane.showConfirmDialog(this,
+                        "Validating again clears the current marks and comments. Export them first if needed. Continue?",
+                        "Clear Current Results", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
+        resultTable.clearSelection();
         tableModel.setRowCount(0);
+        studentResults.clear();
         searchField.setText("");
         statusFilter.setSelectedItem("All");
         detailsArea.setText("Validation in progress...");
         logArea.setText("");
-        resetSummary();
+        updateSummary();
         progressBar.setMinimum(0);
         progressBar.setMaximum(100);
         progressBar.setValue(0);
@@ -227,7 +245,12 @@ public class MainFrame extends JFrame {
                 setControlsEnabled(true);
                 try {
                     get();
-                    if (!results.isEmpty()) progressBar.setString("Validation complete");
+                    if (!studentResults.isEmpty()) progressBar.setString("Validation complete - click Start Grading");
+                    else {
+                        detailsArea.setText("No ZIP submissions found in " + submissionsFolder.getAbsolutePath()
+                                + "\nUse Browse to select the folder containing student ZIP files.");
+                        progressBar.setString("No ZIP submissions found");
+                    }
                 } catch (Exception e) {
                     progressBar.setString("Validation failed");
                     JOptionPane.showMessageDialog(MainFrame.this, "Unexpected error: " + e.getMessage(),
@@ -238,9 +261,10 @@ public class MainFrame extends JFrame {
         worker.execute();
     }
     private void addSubmissionResult(SubmissionResult result) {
-        results.add(result);
+        StudentResult student = new StudentResult(result);
+        studentResults.add(student);
         tableModel.addRow(new Object[] {
-                result.getUsername(), result.getStructureStatus(), result.getHeaderStatus(), result.getOverallStatus()
+                result.getUsername(), result.getStructureStatus(), result.getHeaderStatus(), result.getOverallStatus(), "Not graded", ""
         });
         updateSummary();
         if (resultTable.getSelectedRow() == -1 && resultTable.getRowCount() > 0) {
@@ -250,11 +274,15 @@ public class MainFrame extends JFrame {
     private void showSelectedStudent() {
         int viewRow = resultTable.getSelectedRow();
         if (viewRow < 0) {
+            manualButton.setEnabled(false);
             detailsArea.setText("Select a student to view submission details.");
             return;
         }
         int modelRow = resultTable.convertRowIndexToModel(viewRow);
-        detailsArea.setText(results.get(modelRow).getDetails());
+        if (modelRow >= studentResults.size()) return;
+        StudentResult student = studentResults.get(modelRow);
+        detailsArea.setText(student.getDetails());
+        manualButton.setEnabled(!busy && !student.getQuestions().isEmpty());
         detailsArea.setCaretPosition(0);
     }
     private void applyFilters() {
@@ -266,8 +294,7 @@ public class MainFrame extends JFrame {
             filters.add(new RowFilter<Object, Object>() {
                 @Override
                 public boolean include(Entry<? extends Object, ? extends Object> entry) {
-                    String value = String.valueOf(entry.getValue(3));
-                    return value.equals("Review") || value.equals("Failed");
+                    return studentResults.get((Integer) entry.getIdentifier()).needsAttention();
                 }
             });
         } else if (!status.equals("All")) {
@@ -278,7 +305,7 @@ public class MainFrame extends JFrame {
         else detailsArea.setText("No students match the current search/filter.");
     }
     private void updateSummary() {
-        totalLabel.setText("Total: " + results.size());
+        totalLabel.setText("Total: " + studentResults.size());
         validLabel.setText("Valid: " + countStatus("Valid"));
         correctedLabel.setText("Corrected: " + countStatus("Corrected"));
         reviewLabel.setText("Review: " + countStatus("Review"));
@@ -286,17 +313,10 @@ public class MainFrame extends JFrame {
     }
     private int countStatus(String status) {
         int count = 0;
-        for (SubmissionResult result : results) {
-            if (result.getOverallStatus().equals(status)) count++;
+        for (StudentResult student : studentResults) {
+            if (status.equals(student.getSubmission().getOverallStatus())) count++;
         }
         return count;
-    }
-    private void resetSummary() {
-        totalLabel.setText("Total: 0");
-        validLabel.setText("Valid: 0");
-        correctedLabel.setText("Corrected: 0");
-        reviewLabel.setText("Review: 0");
-        failedLabel.setText("Failed: 0");
     }
     private void appendLog(String message) {
         logArea.append(message + System.lineSeparator());
@@ -316,29 +336,269 @@ public class MainFrame extends JFrame {
         progressBar.setString(processed + " / " + total + " processed");
     }
     private void setControlsEnabled(boolean enabled) {
+        busy = !enabled;
         browseButton.setEnabled(enabled);
         validateButton.setEnabled(enabled);
         submissionsField.setEnabled(enabled);
+        startGradingButton.setEnabled(enabled && studentResults.stream()
+                .anyMatch(student -> !"Failed".equals(student.getSubmission().getOverallStatus())));
+        exportButton.setEnabled(enabled && studentResults.stream().anyMatch(StudentResult::isGraded));
+        showSelectedStudent();
     }
-    private static class StatusRenderer extends DefaultTableCellRenderer {
-        private final Color validColor = new Color(220, 245, 225);
-        private final Color correctedColor = new Color(220, 235, 250);
-        private final Color reviewColor = new Color(255, 239, 190);
-        private final Color failedColor = new Color(255, 220, 220);
-        @Override
-        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
-                boolean hasFocus, int row, int column) {
-            Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-            setHorizontalAlignment(CENTER);
-            if (!isSelected) {
-                String status = String.valueOf(value);
-                if (status.equals("Valid")) component.setBackground(validColor);
-                else if (status.equals("Corrected")) component.setBackground(correctedColor);
-                else if (status.equals("Review")) component.setBackground(reviewColor);
-                else if (status.equals("Failed")) component.setBackground(failedColor);
-                else component.setBackground(table.getBackground());
-            }
-            return component;
+    private void startGrading() {
+        File workspace = new File("workspace");
+        File testers = new File("assessment/testers");
+        File resources = new File("assessment/resources");
+
+        if (!workspace.isDirectory()
+                || !testers.isDirectory()
+                || !resources.isDirectory()) {
+
+            JOptionPane.showMessageDialog(this,
+                    "Cannot find workspace, assessment/testers, "
+                            + "or assessment/resources.\n"
+                            + "Run the application from the project folder.",
+                    "Missing Folder",
+                    JOptionPane.ERROR_MESSAGE);
+            return;
         }
+
+        List<SubmissionResult> currentBatch = new ArrayList<>();
+        for (StudentResult student : studentResults) {
+            currentBatch.add(student.getSubmission());
+        }
+
+        setControlsEnabled(false);
+        progressBar.setValue(0);
+        progressBar.setString("Starting grading...");
+        appendLog("\n=== GRADING STARTED ===");
+
+        SwingWorker<Void, GradingUpdate> worker = new SwingWorker<Void, GradingUpdate>() {
+            @Override
+            protected Void doInBackground() {
+                WorkspaceManager manager = new WorkspaceManager(new File("temp_workspaces"), testers, resources);
+                JavaCompilerService compiler = new JavaCompilerService(10, 1024 * 1024);
+                ProgramExecutor executor = new ProgramExecutor(5, 1024 * 1024, new ArrayList<>());
+                QuestionGrader grader = new QuestionGrader(compiler, new TestCaseRunner(executor), manager);
+                List<QuestionSpec> specs = Arrays.asList(
+                        new QuestionSpec("Q1a", "Q1", "Q1aTester", List.of("Q1a.java")),
+                        new QuestionSpec("Q1b", "Q1", "Q1bTester", List.of("Q1b.java")),
+                        new QuestionSpec("Q2a", "Q2", "Q2aTester", List.of("Q2a.java")),
+                        new QuestionSpec("Q2b", "Q2", "Q2bTester", List.of("Q2b.java")),
+                        new QuestionSpec("Q3", "Q3", "Q3Tester", List.of("Q3.java")));
+                GradingEngine engine = new GradingEngine(grader, specs);
+                for (int row = 0; row < currentBatch.size(); row++) {
+                    SubmissionResult submission = currentBatch.get(row);
+                    try {
+                        if ("Failed".equals(submission.getOverallStatus())) {
+                            publish(new GradingUpdate(row, List.of(), "Skipped: submission validation failed."));
+                            continue;
+                        }
+                        File studentRoot = findStudentRoot(workspace, submission.getUsername());
+                        if (studentRoot == null) {
+                            publish(new GradingUpdate(row, List.of(), "Cannot uniquely locate the student folder."));
+                            continue;
+                        }
+                        publish(new GradingUpdate(row, engine.gradeStudent(studentRoot, submission.getUsername()), ""));
+                    } catch (Exception ex) {
+                        publish(new GradingUpdate(row, List.of(), ex.toString()));
+                    }
+                }
+                return null;
+            }
+            @Override
+            protected void process(List<GradingUpdate> updates) {
+                for (GradingUpdate update : updates) {
+                    StudentResult student = studentResults.get(update.row);
+                    student.setGradingResults(update.questions, update.error);
+                    refreshStudentRow(update.row);
+                    appendLog("Grading: " + student.getSubmission().getUsername());
+                    for (QuestionResult q : update.questions) appendLog("  " + q);
+                    if (!update.error.isEmpty()) appendLog("[ERROR] " + update.error);
+                    else appendLog("Final total: " + student.getTotal() + " / " + student.getMaximum());
+                    updateProgress(update.row + 1, currentBatch.size());
+                }
+                showSelectedStudent();
+            }
+            @Override
+            protected void done() {
+                try {
+                    get();
+                    long attention = studentResults.stream().filter(StudentResult::needsAttention).count();
+                    progressBar.setString("Grading finished - " + attention + " student(s) need attention");
+                    appendLog("=== GRADING FINISHED ===");
+                } catch (Exception ex) {
+                    progressBar.setString("Grading could not complete");
+                    appendLog("[ERROR] " + ex);
+                    JOptionPane.showMessageDialog(MainFrame.this, "Grading could not complete. Check the System Log.",
+                            "Grading Error", JOptionPane.ERROR_MESSAGE);
+                } finally {
+                    setControlsEnabled(true);
+                }
+            }
+        };
+
+        worker.execute();
+    }
+
+    private void refreshStudentRow(int row) {
+        StudentResult student = studentResults.get(row);
+        SubmissionResult submission = student.getSubmission();
+        tableModel.setValueAt(submission.getStructureStatus(), row, 1);
+        tableModel.setValueAt(submission.getHeaderStatus(), row, 2);
+        tableModel.setValueAt(submission.getOverallStatus(), row, 3);
+        tableModel.setValueAt(student.getGradingStatus(), row, 4);
+        tableModel.setValueAt(student.getQuestions().isEmpty() ? "" : student.getTotal() + " / " + student.getMaximum(), row, 5);
+    }
+
+    private void enterManualScore() {
+        int viewRow = resultTable.getSelectedRow();
+        if (busy || viewRow < 0) return;
+        int row = resultTable.convertRowIndexToModel(viewRow);
+        StudentResult student = studentResults.get(row);
+        if (student.getQuestions().isEmpty()) return;
+        JComboBox<String> questions = new JComboBox<>(student.getQuestions().stream()
+                .map(QuestionResult::getQuestionId).toArray(String[]::new));
+        JTextField score = new JTextField(12);
+        JTextArea comment = new JTextArea(4, 28);
+        comment.setLineWrap(true);
+        comment.setWrapStyleWord(true);
+        JLabel range = new JLabel();
+        Runnable loadQuestion = () -> {
+            QuestionResult q = student.getQuestions().get(questions.getSelectedIndex());
+            range.setText("Automatic: " + q.getScore() + " | Allowed: 0 to " + q.getMaxScore());
+            score.setText(Double.toString(student.getFinalScore(q)));
+            comment.setText(student.getComment(q.getQuestionId()));
+        };
+        questions.addActionListener(e -> loadQuestion.run());
+        loadQuestion.run();
+        JPanel form = new JPanel(new GridLayout(0, 1, 5, 5));
+        form.add(new JLabel("Question:")); form.add(questions); form.add(range);
+        form.add(new JLabel("Final score for this question:")); form.add(score);
+        form.add(new JLabel("Reason (required):")); form.add(new JScrollPane(comment));
+        while (JOptionPane.showConfirmDialog(this, form,
+                "Manual Score - " + student.getSubmission().getUsername(),
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) == JOptionPane.OK_OPTION) {
+            try {
+                double mark;
+                try { mark = Double.parseDouble(score.getText().trim()); }
+                catch (NumberFormatException ex) { throw new IllegalArgumentException("Enter a numeric score."); }
+                student.setManualScore((String) questions.getSelectedItem(), mark, comment.getText());
+                refreshStudentRow(row);
+                showSelectedStudent();
+                appendLog("Manual score saved: " + student.getSubmission().getUsername() + " / " + questions.getSelectedItem());
+                return;
+            } catch (IllegalArgumentException ex) {
+                JOptionPane.showMessageDialog(this, ex.getMessage(), "Invalid Manual Score", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+
+private void exportResults() {
+
+    // Let the user choose where to save the final grades CSV.
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle("Save Grading Results (also saves a details CSV)");
+    chooser.setSelectedFile(new File("gradedscores.csv"));
+
+    if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+        return;
+    }
+
+    // Get the selected file path.
+    Path target = chooser.getSelectedFile().toPath().toAbsolutePath();
+
+    // Make sure the final grades file ends in .csv.
+    if (!target.toString().toLowerCase(Locale.ROOT).endsWith(".csv")) {
+        target = Path.of(target + ".csv");
+    }
+
+    // Automatically create the second CSV beside the first one.
+    String detailsName = target.getFileName().toString().replaceFirst("(?i)\\.csv$", "_detail.csv");
+    Path details = target.resolveSibling(detailsName);
+
+    // Ask before replacing either existing file.
+    if ((Files.exists(target) || Files.exists(details)) && JOptionPane.showConfirmDialog(
+        this, "Replace existing export file(s)?\n" + target + "\n" + details, 
+        "Replace Export", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
+        return;
+    }
+
+    try {
+        // Export the current GUI results directly.
+        new CsvExporter().export(target, details, studentResults);
+
+        appendLog("Saved final grades: " + target + "\nSaved question details: " + details);
+
+        JOptionPane.showMessageDialog(this, "Saved:\n" + target + "\n" + details, "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+
+    } catch (IOException ex) {
+        appendLog("[ERROR] CSV export: " + ex.getMessage());
+
+        JOptionPane.showMessageDialog(this, "Could not save both CSV files.\n" + ex.getMessage(), "Export Error", JOptionPane.ERROR_MESSAGE);
+    }
+}
+
+
+    private static class GradingUpdate {
+        final int row;
+        final List<QuestionResult> questions;
+        final String error;
+        GradingUpdate(int row, List<QuestionResult> questions, String error) {
+            this.row = row; this.questions = questions; this.error = error;
+        }
+    }
+
+    private File findStudentRoot(File workspace, String username) {
+        File[] folders = workspace.listFiles(File::isDirectory);
+
+        if (folders == null) {
+            return null;
+        }
+
+        List<File> matches = new ArrayList<>();
+
+        for (File folder : folders) {
+            if (folder.getName().equals(username)) {
+                matches.add(folder);
+                continue;
+            }
+
+            File nestedStudent = new File(folder, username);
+
+            if (nestedStudent.isDirectory()) {
+                matches.add(nestedStudent);
+            }
+        }
+
+        // Avoid selecting an arbitrary folder if duplicates exist.
+        if (matches.size() != 1) {
+            return null;
+        }
+
+        return resolveStudentRoot(matches.get(0));
+    }
+
+    private File resolveStudentRoot(File folder) {
+        if (new File(folder, "Q1").isDirectory()
+                || new File(folder, "Q2").isDirectory()
+                || new File(folder, "Q3").isDirectory()) {
+            return folder;
+        }
+
+        File[] children = folder.listFiles(File::isDirectory);
+
+        if (children != null && children.length == 1) {
+            File child = children[0];
+
+            if (new File(child, "Q1").isDirectory()
+                    || new File(child, "Q2").isDirectory()
+                    || new File(child, "Q3").isDirectory()) {
+                return child;
+            }
+        }
+
+        return folder;
     }
 }
