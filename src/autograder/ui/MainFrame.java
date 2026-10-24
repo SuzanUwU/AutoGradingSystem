@@ -3,6 +3,7 @@ import autograder.service.AutoGradingService;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
@@ -62,6 +63,7 @@ public class MainFrame extends JFrame {
         sorter = new TableRowSorter<>(tableModel);
         sorter.setSortsOnUpdates(true);
         resultTable.setRowSorter(sorter);
+        applyStatusColors();
         buildInterface();
         connectActions();
     }
@@ -126,8 +128,48 @@ public class MainFrame extends JFrame {
             label.setFont(label.getFont().deriveFont(Font.BOLD, 15f));
             panel.add(label);
         }
+        validLabel.setForeground(new Color(34, 120, 58));
+        correctedLabel.setForeground(new Color(37, 99, 235));
+        reviewLabel.setForeground(new Color(180, 83, 9));
+        failedLabel.setForeground(new Color(185, 28, 28));
         return panel;
     }
+    private void applyStatusColors() {
+        DefaultTableCellRenderer statusRenderer = new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+                JLabel label = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                String status = value == null ? "" : value.toString();
+                label.setHorizontalAlignment(JLabel.CENTER);
+                label.setFont(label.getFont().deriveFont(Font.BOLD));
+                label.setForeground(Color.BLACK);
+                label.setBackground(Color.WHITE);
+
+                if (status.equals("Valid")) {
+                    label.setBackground(new Color(220, 245, 224));
+                    label.setForeground(new Color(28, 94, 45));
+                } else if (status.equals("Corrected")) {
+                    label.setBackground(new Color(219, 234, 254));
+                    label.setForeground(new Color(30, 64, 175));
+                } else if (status.equals("Review")) {
+                    label.setBackground(new Color(254, 243, 199));
+                    label.setForeground(new Color(146, 64, 14));
+                } else if (status.equals("Failed")) {
+                    label.setBackground(new Color(254, 226, 226));
+                    label.setForeground(new Color(153, 27, 27));
+                }
+
+                if (isSelected) label.setBorder(BorderFactory.createLineBorder(table.getSelectionBackground(), 2));
+                else label.setBorder(BorderFactory.createEmptyBorder(1, 4, 1, 4));
+                return label;
+            }
+        };
+
+        resultTable.getColumnModel().getColumn(1).setCellRenderer(statusRenderer);
+        resultTable.getColumnModel().getColumn(2).setCellRenderer(statusRenderer);
+        resultTable.getColumnModel().getColumn(3).setCellRenderer(statusRenderer);
+    }
+
     private JTabbedPane createTabs() {
         JTabbedPane tabs = new JTabbedPane();
         tabs.addTab("Submissions", createSubmissionsPanel());
