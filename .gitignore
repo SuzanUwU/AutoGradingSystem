@@ -1,11 +1,16 @@
 # Compiled Java files
 *.class
+
 # Trusted instructor-provided bytecode (DataException, Shape, Circle, Rectangle)
 !assessment/resources/**/*.class
 
 # Generated content
 output/*
 workspace/*
+workspaces/
+temp_workspaces/
+extracted/
+generated_submissions/
 classes/*
 test-classes/
 
