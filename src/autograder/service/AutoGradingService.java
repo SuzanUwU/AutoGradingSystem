@@ -3,6 +3,7 @@ import autograder.model.SubmissionResult;
 import autograder.validation.SubmissionCorrector;
 import autograder.validation.SubmissionValidator;
 import autograder.validation.ZipExtractor;
+import autograder.validation.TemplateComparator;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -12,9 +13,13 @@ import java.util.Map;
 import java.util.function.Consumer;
 public class AutoGradingService {
     private static final String ZIP_EXTENSION = ".zip";
+    // TODO: read from config/grader.properties once ConfigLoader is implemented.
+    private static final String TEMPLATE_FOLDER = "assessment/template";
     private final File workspaceFolder;
+    private final TemplateComparator templateComparator;
     public AutoGradingService(File workspaceFolder) {
         this.workspaceFolder = workspaceFolder;
+        this.templateComparator = new TemplateComparator(new File(TEMPLATE_FOLDER));
     }
     public void processSubmissions(File submissionsFolder, Listener listener) {
         File[] zipFiles = findZipFiles(submissionsFolder);
@@ -111,6 +116,15 @@ public class AutoGradingService {
         state.stage = Stage.VALIDATION;
         Map<String, File> questionFolders = validator.findQuestionFolders(correctedRoot);
         displayQuestionFolders(questionFolders, validator, expectedUsername, logger, state);
+
+        // Must run before correctHeaders(), which edits the students' files.
+        boolean templateSubmission = templateComparator.isUnmodifiedTemplate(correctedRoot);
+        if (templateSubmission) {
+            logger.accept("[WARNING] Submission appears to be the original resource folder: "
+                    + "no Java file differs from the template.");
+            state.addSubmissionIssue("Original resource folder submitted");
+        }
+
         logger.accept("\nCorrecting Java headers...");
 
         // for details csv ; check file headers
@@ -122,7 +136,7 @@ public class AutoGradingService {
         FinalInspection inspection = inspectFinalSubmission(correctedRoot, expectedUsername, validator);
         String structureStatus = inspection.structureIssue ? "Review" : state.structureCorrected ? "Corrected" : "Valid";
         String headerStatus = inspection.headerIssue ? "Review" : state.headerCorrected ? "Corrected" : "Valid";
-        String overallStatus = getOverallStatus(structureStatus, headerStatus);
+        String overallStatus = templateSubmission ? "Review" : getOverallStatus(structureStatus, headerStatus);
         String details = buildDetails(zipFile, expectedUsername, correctedRoot, structureStatus, headerStatus,
                 overallStatus, inspection, state, validator);
 
