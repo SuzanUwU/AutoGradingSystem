@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Locale;
 import java.nio.file.Path;
 import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
 import java.io.IOException;
 import autograder.reporting.CsvExporter;
 import java.util.regex.Pattern;
@@ -23,7 +24,7 @@ import autograder.grading.*;
 import autograder.model.*;
 
 public class MainFrame extends JFrame {
-    private final JTextField submissionsField = new JTextField("submissions", 35);
+    private final JTextField submissionsField = new JTextField(Path.of(System.getProperty("user.dir"), "submissions").toAbsolutePath().normalize().toString(), 35);
     private final JTextField searchField = new JTextField(22);
     private final JComboBox<String> statusFilter = new JComboBox<>(
             new String[] {"All", "Needs Attention", "Valid", "Corrected", "Review", "Failed"});
@@ -46,6 +47,11 @@ public class MainFrame extends JFrame {
     private final DefaultTableModel tableModel;
     private final JTable resultTable;
     private final TableRowSorter<DefaultTableModel> sorter;
+    private final DefaultTableModel correctionTableModel;
+    private final JTable correctionTable;
+    private final TableRowSorter<DefaultTableModel> correctionSorter;
+    private final JTextArea correctionDetailArea = new JTextArea(6, 40);
+    private final JLabel mostFixesLabel = new JLabel("Most fixes: -");
     
     public MainFrame() {
         setTitle("CS102 Auto Grading System");
@@ -63,6 +69,24 @@ public class MainFrame extends JFrame {
         sorter = new TableRowSorter<>(tableModel);
         sorter.setSortsOnUpdates(true);
         resultTable.setRowSorter(sorter);
+
+        correctionTableModel = new DefaultTableModel(
+                new Object[] {"Student", "Folder", "Name", "Email", "Open Issues", "Anomalies", "Total Fixes", "Status"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+
+            @Override
+            public Class<?> getColumnClass(int columnIndex) {
+                if (columnIndex >= 1 && columnIndex <= 6) return Integer.class;
+                return String.class;
+            }
+        };
+        correctionTable = new JTable(correctionTableModel);
+        correctionSorter = new TableRowSorter<>(correctionTableModel);
+        correctionSorter.setSortsOnUpdates(true);
+        correctionTable.setRowSorter(correctionSorter);
         applyStatusColors();
         buildInterface();
         connectActions();
@@ -134,14 +158,14 @@ public class MainFrame extends JFrame {
         failedLabel.setForeground(new Color(185, 28, 28));
         return panel;
     }
-    private void applyStatusColors() {
-        DefaultTableCellRenderer statusRenderer = new DefaultTableCellRenderer() {
+    private DefaultTableCellRenderer createStatusRenderer() {
+        return new DefaultTableCellRenderer() {
             @Override
             public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
                 JLabel label = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
                 String status = value == null ? "" : value.toString();
                 label.setHorizontalAlignment(JLabel.CENTER);
-                label.setFont(label.getFont().deriveFont(Font.BOLD));
+                label.setFont(table.getFont().deriveFont(Font.BOLD));
                 label.setForeground(Color.BLACK);
                 label.setBackground(Color.WHITE);
 
@@ -164,10 +188,25 @@ public class MainFrame extends JFrame {
                 return label;
             }
         };
+    }
 
+    private void applyStatusColors() {
+        DefaultTableCellRenderer statusRenderer = createStatusRenderer();
         resultTable.getColumnModel().getColumn(1).setCellRenderer(statusRenderer);
         resultTable.getColumnModel().getColumn(2).setCellRenderer(statusRenderer);
         resultTable.getColumnModel().getColumn(3).setCellRenderer(statusRenderer);
+
+        DefaultTableCellRenderer gradingRenderer = new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+                JLabel label = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                String gradingStatus = value == null ? "" : value.toString();
+                label.setFont(table.getFont().deriveFont(gradingStatus.equals("Review") ? Font.BOLD : Font.PLAIN));
+                return label;
+            }
+        };
+        resultTable.getColumnModel().getColumn(4).setCellRenderer(gradingRenderer);
+        correctionTable.getColumnModel().getColumn(7).setCellRenderer(createStatusRenderer());
     }
 
     private JTabbedPane createTabs() {
@@ -196,13 +235,93 @@ public class MainFrame extends JFrame {
         detailsArea.setText("Select a student to view submission details.");
         JPanel detailsPanel = new JPanel(new BorderLayout());
         detailsPanel.setBorder(BorderFactory.createTitledBorder("Submission Details"));
-        detailsPanel.add(new JScrollPane(detailsArea), BorderLayout.CENTER);
+        JTabbedPane detailsTabs = new JTabbedPane();
+        detailsTabs.addTab("Correction Summary", createCorrectionPanel());
+        detailsTabs.addTab("Full Details", new JScrollPane(detailsArea));
+        detailsPanel.add(detailsTabs, BorderLayout.CENTER);
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tablePanel, detailsPanel);
         splitPane.setResizeWeight(0.5);
         splitPane.setDividerLocation(560);
         panel.add(splitPane, BorderLayout.CENTER);
         return panel;
     }
+    private JPanel createCorrectionPanel() {
+        JPanel panel = new JPanel(new BorderLayout(6, 6));
+        mostFixesLabel.setFont(mostFixesLabel.getFont().deriveFont(Font.BOLD));
+        panel.add(mostFixesLabel, BorderLayout.NORTH);
+
+        correctionTable.setFillsViewportHeight(true);
+        correctionTable.setRowHeight(24);
+        correctionTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        correctionTable.getColumnModel().getColumn(0).setPreferredWidth(150);
+        correctionTable.getColumnModel().getColumn(1).setPreferredWidth(55);
+        correctionTable.getColumnModel().getColumn(2).setPreferredWidth(50);
+        correctionTable.getColumnModel().getColumn(3).setPreferredWidth(50);
+        correctionTable.getColumnModel().getColumn(4).setPreferredWidth(75);
+        correctionTable.getColumnModel().getColumn(5).setPreferredWidth(70);
+        correctionTable.getColumnModel().getColumn(6).setPreferredWidth(70);
+        correctionTable.getColumnModel().getColumn(7).setPreferredWidth(85);
+
+        DefaultTableCellRenderer countRenderer = new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+                JLabel label = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                int count = value instanceof Number ? ((Number) value).intValue() : 0;
+                int modelColumn = table.convertColumnIndexToModel(column);
+
+                label.setHorizontalAlignment(JLabel.CENTER);
+                label.setFont(table.getFont().deriveFont(Font.PLAIN));
+                label.setForeground(Color.BLACK);
+                label.setBackground(Color.WHITE);
+
+                if (modelColumn == 4 || modelColumn == 5) {
+                    // Open Issues / Anomalies: any positive number needs attention.
+                    if (count == 1) {
+                        label.setBackground(new Color(254, 243, 199));
+                        label.setForeground(new Color(146, 64, 14));
+                        label.setFont(table.getFont().deriveFont(Font.BOLD));
+                    } else if (count >= 2) {
+                        label.setBackground(new Color(254, 226, 226));
+                        label.setForeground(new Color(153, 27, 27));
+                        label.setFont(table.getFont().deriveFont(Font.BOLD));
+                    }
+                } else {
+                    // Folder / Name / Email / Total Fixes: stronger colour = more automatic fixes.
+                    if (count >= 1 && count <= 2) {
+                        label.setBackground(new Color(254, 249, 195));
+                    } else if (count >= 3 && count <= 5) {
+                        label.setBackground(new Color(254, 215, 170));
+                        label.setForeground(new Color(154, 52, 18));
+                        label.setFont(table.getFont().deriveFont(Font.BOLD));
+                    } else if (count >= 6) {
+                        label.setBackground(new Color(254, 202, 202));
+                        label.setForeground(new Color(153, 27, 27));
+                        label.setFont(table.getFont().deriveFont(Font.BOLD));
+                    }
+                }
+
+                if (isSelected) label.setBorder(BorderFactory.createLineBorder(table.getSelectionBackground(), 2));
+                else label.setBorder(BorderFactory.createEmptyBorder(1, 4, 1, 4));
+                return label;
+            }
+        };
+        for (int column = 1; column <= 6; column++) correctionTable.getColumnModel().getColumn(column).setCellRenderer(countRenderer);
+        correctionTable.getColumnModel().getColumn(7).setCellRenderer(createStatusRenderer());
+
+        panel.add(new JScrollPane(correctionTable), BorderLayout.CENTER);
+
+        correctionDetailArea.setEditable(false);
+        correctionDetailArea.setLineWrap(true);
+        correctionDetailArea.setWrapStyleWord(true);
+        correctionDetailArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        correctionDetailArea.setText("Select a student to see exact correction files and anomalies.");
+        JScrollPane correctionDetailsScroll = new JScrollPane(correctionDetailArea);
+        correctionDetailsScroll.setBorder(BorderFactory.createTitledBorder("Selected Student"));
+        correctionDetailsScroll.setPreferredSize(new Dimension(0, 150));
+        panel.add(correctionDetailsScroll, BorderLayout.SOUTH);
+        return panel;
+    }
+
     private JPanel createLogPanel() {
         logArea.setEditable(false);
         logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
@@ -226,6 +345,9 @@ public class MainFrame extends JFrame {
         resultTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) showSelectedStudent();
         });
+        correctionTable.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) showSelectedCorrection();
+        });
         startGradingButton.addActionListener(e -> startGrading());
         manualButton.addActionListener(e -> enterManualScore());
         exportButton.addActionListener(e -> exportResults());
@@ -239,7 +361,8 @@ public class MainFrame extends JFrame {
         }
     }
     private void validateSubmissions() {
-        File submissionsFolder = new File(submissionsField.getText().trim());
+        File submissionsFolder = Path.of(submissionsField.getText().trim()).toAbsolutePath().normalize().toFile();
+        submissionsField.setText(submissionsFolder.getAbsolutePath());
         if (!submissionsFolder.isDirectory()) {
             JOptionPane.showMessageDialog(this, "Please select a valid submissions folder.",
                     "Invalid Folder", JOptionPane.ERROR_MESSAGE);
@@ -251,7 +374,10 @@ public class MainFrame extends JFrame {
                         "Clear Current Results", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
         resultTable.clearSelection();
         tableModel.setRowCount(0);
+        correctionTableModel.setRowCount(0);
         studentResults.clear();
+        mostFixesLabel.setText("Most fixes: -");
+        correctionDetailArea.setText("Validation in progress...");
         searchField.setText("");
         statusFilter.setSelectedItem("All");
         detailsArea.setText("Validation in progress...");
@@ -287,11 +413,13 @@ public class MainFrame extends JFrame {
                 setControlsEnabled(true);
                 try {
                     get();
-                    if (!studentResults.isEmpty()) progressBar.setString("Validation complete - click Start Grading");
-                    else {
-                        detailsArea.setText("No ZIP submissions found in " + submissionsFolder.getAbsolutePath()
-                                + "\nUse Browse to select the folder containing student ZIP files.");
-                        progressBar.setString("No ZIP submissions found");
+                    if (!studentResults.isEmpty()) {
+                        refreshCorrectionTable();
+                        saveCorrectionHistoryCsv();
+                        progressBar.setString("Validation complete - click Start Grading");
+                    } else {
+                        detailsArea.setText("No submissions were processed.\nCheck the System Log for details.");
+                        progressBar.setString("No submissions processed");
                     }
                 } catch (Exception e) {
                     progressBar.setString("Validation failed");
@@ -309,6 +437,7 @@ public class MainFrame extends JFrame {
                 result.getUsername(), result.getStructureStatus(), result.getHeaderStatus(), result.getOverallStatus(), "Not graded", ""
         });
         updateSummary();
+        refreshCorrectionTable();
         if (resultTable.getSelectedRow() == -1 && resultTable.getRowCount() > 0) {
             resultTable.setRowSelectionInterval(0, 0);
         }
@@ -318,15 +447,131 @@ public class MainFrame extends JFrame {
         if (viewRow < 0) {
             manualButton.setEnabled(false);
             detailsArea.setText("Select a student to view submission details.");
+            correctionDetailArea.setText("Select a student to see exact correction files and anomalies.");
             return;
         }
         int modelRow = resultTable.convertRowIndexToModel(viewRow);
         if (modelRow >= studentResults.size()) return;
         StudentResult student = studentResults.get(modelRow);
         detailsArea.setText(student.getDetails());
+        showCorrectionSummary(student.getSubmission());
+        selectCorrectionRow(student.getSubmission().getUsername());
         manualButton.setEnabled(!busy && !student.getQuestions().isEmpty());
         detailsArea.setCaretPosition(0);
     }
+    private void refreshCorrectionTable() {
+        correctionTableModel.setRowCount(0);
+        for (StudentResult student : studentResults) {
+            SubmissionResult s = student.getSubmission();
+            correctionTableModel.addRow(new Object[] {
+                    s.getUsername(), s.getFolderFixCount(), s.getNameFixCount(), s.getEmailFixCount(),
+                    s.getOpenIssueCount(), s.getAnomalyCount(), s.getTotalFixCount(), s.getOverallStatus()
+            });
+        }
+        correctionSorter.setSortKeys(Arrays.asList(
+                new RowSorter.SortKey(6, SortOrder.DESCENDING),
+                new RowSorter.SortKey(0, SortOrder.ASCENDING)));
+        updateMostFixesLabel();
+    }
+
+    private void updateMostFixesLabel() {
+        if (studentResults.isEmpty()) {
+            mostFixesLabel.setText("Most fixes: -");
+            return;
+        }
+        int max = studentResults.stream().mapToInt(s -> s.getSubmission().getTotalFixCount()).max().orElse(0);
+        if (max == 0) {
+            mostFixesLabel.setText("Most fixes: None");
+            return;
+        }
+        ArrayList<String> names = new ArrayList<>();
+        for (StudentResult student : studentResults) {
+            if (student.getSubmission().getTotalFixCount() == max) names.add(student.getSubmission().getUsername());
+        }
+        mostFixesLabel.setText("Most fixes: " + String.join(", ", names) + " (" + max + ")");
+    }
+
+    private void showSelectedCorrection() {
+        int viewRow = correctionTable.getSelectedRow();
+        if (viewRow < 0) return;
+        int modelRow = correctionTable.convertRowIndexToModel(viewRow);
+        String username = String.valueOf(correctionTableModel.getValueAt(modelRow, 0));
+        for (StudentResult student : studentResults) {
+            if (student.getSubmission().getUsername().equals(username)) {
+                showCorrectionSummary(student.getSubmission());
+                return;
+            }
+        }
+    }
+
+    private void showCorrectionSummary(SubmissionResult submission) {
+        StringBuilder text = new StringBuilder();
+        text.append(submission.getUsername()).append(" | Total fixes: ").append(submission.getTotalFixCount())
+                .append(" | Status: ").append(submission.getOverallStatus()).append('\n');
+        text.append("Folder (").append(submission.getFolderFixCount()).append("): ").append(joinDetails(submission.getFolderFixDetails())).append('\n');
+        text.append("Name (").append(submission.getNameFixCount()).append("): ").append(joinDetails(submission.getNameFixDetails())).append('\n');
+        text.append("Email (").append(submission.getEmailFixCount()).append("): ").append(joinDetails(submission.getEmailFixDetails())).append('\n');
+        text.append("Open Issues (").append(submission.getOpenIssueCount()).append("): ").append(joinDetails(submission.getOpenIssueDetails())).append('\n');
+        text.append("Anomalies (").append(submission.getAnomalyCount()).append("): ").append(joinDetails(submission.getAnomalyDetails()));
+        correctionDetailArea.setText(text.toString());
+        correctionDetailArea.setCaretPosition(0);
+    }
+
+    private String joinDetails(List<String> details) {
+        return details.isEmpty() ? "None" : String.join(", ", details);
+    }
+
+    private void selectCorrectionRow(String username) {
+        for (int modelRow = 0; modelRow < correctionTableModel.getRowCount(); modelRow++) {
+            if (username.equals(correctionTableModel.getValueAt(modelRow, 0))) {
+                int viewRow = correctionTable.convertRowIndexToView(modelRow);
+                if (viewRow >= 0 && correctionTable.getSelectedRow() != viewRow) correctionTable.setRowSelectionInterval(viewRow, viewRow);
+                return;
+            }
+        }
+    }
+
+    private void saveCorrectionHistoryCsv() {
+        Path output = Path.of("workspace", "correction_history.csv");
+        ArrayList<String> lines = new ArrayList<>();
+        lines.add("Student,Folder Fixes,Name Fixes,Email Fixes,Open Issues,Anomalies,Total Fixes,Status,Folder Details,Name Details,Email Details,Open Issue Details,Anomaly Details");
+        for (StudentResult student : studentResults) {
+            SubmissionResult s = student.getSubmission();
+            lines.add(csvValue(s.getUsername()) + "," + csvCount(s.getFolderFixCount()) + "," + csvCount(s.getNameFixCount()) + ","
+                    + csvCount(s.getEmailFixCount()) + "," + csvCount(s.getOpenIssueCount()) + "," + csvCount(s.getAnomalyCount()) + ","
+                    + csvCount(s.getTotalFixCount()) + "," + csvValue(s.getOverallStatus()) + ","
+                    + csvValue(csvDetails(s.getFolderFixDetails())) + "," + csvValue(csvDetails(s.getNameFixDetails())) + ","
+                    + csvValue(csvDetails(s.getEmailFixDetails())) + "," + csvValue(csvDetails(s.getOpenIssueDetails())) + ","
+                    + csvValue(csvDetails(s.getAnomalyDetails())));
+        }
+        try {
+            Files.createDirectories(output.getParent());
+            Files.write(output, lines, StandardCharsets.UTF_8);
+            appendLog("Saved correction history: " + output);
+        } catch (IOException e) {
+            appendLog("[WARNING] Could not update correction_history.csv: " + e.getMessage());
+
+            JOptionPane.showMessageDialog(this,
+                    "Could not update correction_history.csv.\n\n"
+                            + "Please close the CSV file if it is open in Excel, then validate again.",
+                    "Correction History File In Use",
+                    JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    private String csvCount(int count) {
+        return count == 0 ? "" : Integer.toString(count);
+    }
+
+    private String csvDetails(List<String> details) {
+        return details.isEmpty() ? "" : String.join(", ", details);
+    }
+
+    private String csvValue(String value) {
+        String safe = value == null ? "" : value.replace("\r", " ").replace("\n", " ");
+        return "\"" + safe.replace("\"", "\"\"") + "\"";
+    }
+
     private void applyFilters() {
         String search = searchField.getText().trim();
         String status = String.valueOf(statusFilter.getSelectedItem());

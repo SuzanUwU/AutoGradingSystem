@@ -24,10 +24,19 @@ public class AutoGradingService {
     public void processSubmissions(File submissionsFolder, Listener listener) {
         File[] zipFiles = findZipFiles(submissionsFolder);
         if (zipFiles.length == 0) {
-            listener.onLog("No ZIP submissions found.");
+            listener.onLog("No ZIP submissions found in: " + submissionsFolder.getAbsolutePath());
             listener.onProgress(0, 0);
             return;
         }
+
+        try {
+            cleanWorkspace();
+        } catch (IOException e) {
+            listener.onLog("[ERROR] Could not clear old workspace: " + e.getMessage());
+            listener.onProgress(0, zipFiles.length);
+            return;
+        }
+
         listener.onLog("Found " + zipFiles.length + " submission(s).\n");
         int completed = 0;
         int failed = 0;
@@ -55,6 +64,41 @@ public class AutoGradingService {
         listener.onLog("Failed: " + failed);
     }
 
+    private void cleanWorkspace() throws IOException {
+        if (!workspaceFolder.exists()) {
+            if (!workspaceFolder.mkdirs()) {
+                throw new IOException("Cannot create workspace folder.");
+            }
+            return;
+        }
+
+        File[] files = workspaceFolder.listFiles();
+        if (files == null) return;
+
+        for (File file : files) {
+            if (file.isFile() && file.getName().equalsIgnoreCase("correction_history.csv")) {
+                continue;
+            }
+
+            deleteRecursively(file);
+        }
+    }
+
+    private void deleteRecursively(File file) throws IOException {
+    if (file.isDirectory()) {
+        File[] children = file.listFiles();
+
+        if (children != null) {
+            for (File child : children) {
+                deleteRecursively(child);
+            }
+        }
+    }
+
+    if (!file.delete() && file.exists()) {
+        throw new IOException("Cannot delete: " + file.getPath());
+    }
+}
     // for details csv
     private String getQuestionForFile(File javaFile, File root) {
         try {
@@ -123,6 +167,7 @@ public class AutoGradingService {
             logger.accept("[WARNING] Submission appears to be the original resource folder: "
                     + "no Java file differs from the template.");
             state.addSubmissionIssue("Original resource folder submitted");
+            state.addAnomaly("Original resource/template folder submitted");
         }
 
         logger.accept("\nCorrecting Java headers...");
@@ -134,13 +179,16 @@ public class AutoGradingService {
         corrector.correctHeaders(correctedRoot, expectedUsername);
         state.stage = Stage.NONE;
         FinalInspection inspection = inspectFinalSubmission(correctedRoot, expectedUsername, validator);
+        recordOpenIssues(correctedRoot, expectedUsername, validator, inspection, state);
         String structureStatus = inspection.structureIssue ? "Review" : state.structureCorrected ? "Corrected" : "Valid";
         String headerStatus = inspection.headerIssue ? "Review" : state.headerCorrected ? "Corrected" : "Valid";
         String overallStatus = templateSubmission ? "Review" : getOverallStatus(structureStatus, headerStatus);
         String details = buildDetails(zipFile, expectedUsername, correctedRoot, structureStatus, headerStatus,
                 overallStatus, inspection, state, validator);
 
-        return new SubmissionResult(expectedUsername, structureStatus, headerStatus, overallStatus, details, state.submissionIssues, state.q1Issues, state.q2Issues, state.q3Issues);
+        return new SubmissionResult(expectedUsername, structureStatus, headerStatus, overallStatus, details,
+                state.submissionIssues, state.q1Issues, state.q2Issues, state.q3Issues,
+                state.folderFixes, state.nameFixes, state.emailFixes, state.openIssues, state.anomalies);
     }
     private FinalInspection inspectFinalSubmission(File root, String username, SubmissionValidator validator) throws IOException {
         FinalInspection inspection = new FinalInspection();
@@ -163,6 +211,34 @@ public class AutoGradingService {
         }
         return inspection;
     }
+    private void recordOpenIssues(File root, String username, SubmissionValidator validator, FinalInspection inspection, SubmissionState state) throws IOException {
+        if (root == null || !root.isDirectory() || !root.getName().equalsIgnoreCase(username)) {
+            state.addOpenIssue("Username folder/path still needs review");
+        }
+
+        for (Map.Entry<String, File> entry : inspection.questionFolders.entrySet()) {
+            File questionFolder = entry.getValue();
+            if (questionFolder == null) {
+                state.addOpenIssue(entry.getKey() + " folder missing");
+                continue;
+            }
+            for (String fileName : getRequiredFiles(entry.getKey())) {
+                if (!new File(questionFolder, fileName).isFile()) {
+                    state.addOpenIssue(entry.getKey() + "/" + fileName + " missing");
+                }
+            }
+        }
+
+        if (inspection.javaFiles.isEmpty()) state.addOpenIssue("No Java files found");
+        for (File javaFile : inspection.javaFiles) {
+            String path = root.toPath().relativize(javaFile.toPath()).toString().replace("\\", "/");
+            String[] header = validator.getHeaderValues(javaFile);
+            if (header[0] == null || header[0].isBlank()) state.addOpenIssue(path + " Name missing");
+            if (header[1] == null || header[1].isBlank()) state.addOpenIssue(path + " Email ID missing");
+            else if (!header[1].equalsIgnoreCase(username)) state.addOpenIssue(path + " Email ID mismatch");
+        }
+    }
+
     private String buildDetails(File zipFile, String username, File root, String structureStatus, String headerStatus,
             String overallStatus, FinalInspection inspection, SubmissionState state, SubmissionValidator validator) throws IOException {
         StringBuilder details = new StringBuilder();
@@ -211,7 +287,11 @@ public class AutoGradingService {
                 + "\nOverall status: Failed"
                 + "\n\nSUBMISSION\nZIP file: " + zipFile.getName()
                 + "\n\nERROR\n" + e.getMessage();
-        return new SubmissionResult(username, "Failed", "Failed", "Failed", details, new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>());
+        ArrayList<String> openIssues = new ArrayList<>();
+        openIssues.add("Processing failed: " + e.getMessage());
+        return new SubmissionResult(username, "Failed", "Failed", "Failed", details,
+                new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(),
+                new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), openIssues, new ArrayList<String>());
     }
     private void displayQuestionFolders(Map<String, File> folders, SubmissionValidator validator,
             String username, Consumer<String> logger, SubmissionState state) throws IOException {
@@ -296,7 +376,11 @@ public class AutoGradingService {
         private final ArrayList<String> q1Issues = new ArrayList<>();
         private final ArrayList<String> q2Issues = new ArrayList<>();
         private final ArrayList<String> q3Issues = new ArrayList<>();
-
+        private final ArrayList<String> folderFixes = new ArrayList<>();
+        private final ArrayList<String> nameFixes = new ArrayList<>();
+        private final ArrayList<String> emailFixes = new ArrayList<>();
+        private final ArrayList<String> openIssues = new ArrayList<>();
+        private final ArrayList<String> anomalies = new ArrayList<>();
 
         private void addSubmissionIssue(String issue) {
             if (!submissionIssues.contains(issue)) {
@@ -321,11 +405,59 @@ public class AutoGradingService {
             }
         }
 
+        private void addOpenIssue(String issue) {
+            if (!openIssues.contains(issue)) openIssues.add(issue);
+        }
+
+        private void addAnomaly(String anomaly) {
+            if (!anomalies.contains(anomaly)) anomalies.add(anomaly);
+        }
+
+        private void addFix(ArrayList<String> target, String detail) {
+            if (!target.contains(detail)) target.add(detail);
+        }
+
+        private String stripCorrectedPrefix(String text) {
+            return text.replaceFirst("^\\[CORRECTED\\]\\s*", "").trim();
+        }
+
+        private String compactFolderFix(String detail) {
+            if (detail.startsWith("Renamed top-level folder from ")) {
+                String rest = detail.substring("Renamed top-level folder from ".length());
+                return rest.replace(" to ", " -> ");
+            }
+            if (detail.startsWith("Added missing username folder: ")) {
+                return "Added username folder: " + detail.substring("Added missing username folder: ".length());
+            }
+            return detail;
+        }
+
+        private String compactHeaderFix(String detail, String label) {
+            if (detail.startsWith("Added " + label + " to ")) {
+                return detail.substring(("Added " + label + " to ").length()) + " (added)";
+            }
+            if (label.equals("Email ID") && detail.startsWith("Email ID in ")) {
+                String rest = detail.substring("Email ID in ".length());
+                int colon = rest.lastIndexOf(':');
+                String path = colon >= 0 ? rest.substring(0, colon).trim() : rest;
+                return path + " (full email changed to short ID)";
+            }
+            return detail;
+        }
+
         private void track(String message) {
             String text = message.trim();
             if (text.startsWith("[CORRECTED]")) {
-                if (stage == Stage.STRUCTURE) structureCorrected = true;
-                if (stage == Stage.HEADERS) headerCorrected = true;
+                String detail = stripCorrectedPrefix(text);
+                if (stage == Stage.STRUCTURE) {
+                    structureCorrected = true;
+                    addFix(folderFixes, compactFolderFix(detail));
+                }
+                if (stage == Stage.HEADERS) {
+                    headerCorrected = true;
+                    if (detail.contains("Name")) addFix(nameFixes, compactHeaderFix(detail, "Name"));
+                    if (detail.contains("Email ID")) addFix(emailFixes, compactHeaderFix(detail, "Email ID"));
+                }
                 notableMessages.add(text);
             } else if (text.startsWith("[WARNING]") || text.startsWith("[MISSING]") || text.startsWith("[ERROR]")) {
                 notableMessages.add(text);

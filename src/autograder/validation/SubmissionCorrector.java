@@ -51,10 +51,11 @@ public class SubmissionCorrector {
     public void correctHeaders(File submissionFolder, String expectedUsername) throws IOException {
         ArrayList<File> javaFiles = new ArrayList<>();
         collectJavaFiles(submissionFolder, javaFiles);
+        javaFiles.sort((a, b) -> a.getPath().compareToIgnoreCase(b.getPath()));
         String trustedName = findTrustedName(javaFiles, expectedUsername);
         boolean corrected = false;
         for (File javaFile : javaFiles) {
-            if (correctHeader(javaFile, expectedUsername, trustedName)) corrected = true;
+            if (correctHeader(javaFile, submissionFolder, expectedUsername, trustedName)) corrected = true;
         }
         if (!corrected) logger.accept("[OK] No Java header corrections needed.");
     }
@@ -67,8 +68,9 @@ public class SubmissionCorrector {
         }
         return null;
     }
-    private boolean correctHeader(File javaFile, String expectedUsername, String trustedName) throws IOException {
+    private boolean correctHeader(File javaFile, File submissionFolder, String expectedUsername, String trustedName) throws IOException {
         List<String> lines = Files.readAllLines(javaFile.toPath());
+        String filePath = relativeJavaPath(submissionFolder, javaFile);
         int nameIndex = findHeaderLine(lines, "Name:");
         int emailIndex = findHeaderLine(lines, "Email ID:");
         String name = getHeaderValue(lines, "Name:");
@@ -85,19 +87,19 @@ public class SubmissionCorrector {
             header.add(" */");
             header.add("");
             header.addAll(lines);
-            if (trustedName == null) logger.accept("[WARNING] Cannot determine student name for " + javaFile.getName());
-            else logger.accept("[CORRECTED] Added Name to " + javaFile.getName());
-            logger.accept("[CORRECTED] Added Email ID to " + javaFile.getName());
+            if (trustedName == null) logger.accept("[WARNING] Cannot determine student name for " + filePath);
+            else logger.accept("[CORRECTED] Added Name to " + filePath);
+            logger.accept("[CORRECTED] Added Email ID to " + filePath);
             Files.write(javaFile.toPath(), header);
             return true;
         }
         if (nameMissing) {
             if (trustedName == null) {
-                logger.accept("[WARNING] Cannot determine student name for " + javaFile.getName());
+                logger.accept("[WARNING] Cannot determine student name for " + filePath);
             } else {
                 if (nameIndex >= 0) lines.set(nameIndex, getPrefix(lines.get(nameIndex)) + "Name: " + trustedName);
                 else lines.add(emailIndex, " * Name: " + trustedName);
-                logger.accept("[CORRECTED] Added Name to " + javaFile.getName());
+                logger.accept("[CORRECTED] Added Name to " + filePath);
                 changed = true;
             }
         }
@@ -109,16 +111,23 @@ public class SubmissionCorrector {
                 nameIndex = findHeaderLine(lines, "Name:");
                 if (nameIndex >= 0) lines.add(nameIndex + 1, " * Email ID: " + expectedUsername);
             }
-            logger.accept("[CORRECTED] Added Email ID to " + javaFile.getName());
+            logger.accept("[CORRECTED] Added Email ID to " + filePath);
             changed = true;
         } else if (fullEmail) {
             emailIndex = findHeaderLine(lines, "Email ID:");
             lines.set(emailIndex, getPrefix(lines.get(emailIndex)) + "Email ID: " + expectedUsername);
-            logger.accept("[CORRECTED] Email ID in " + javaFile.getName() + ": " + expectedUsername);
+            logger.accept("[CORRECTED] Email ID in " + filePath + ": " + expectedUsername);
             changed = true;
         }
         if (changed) Files.write(javaFile.toPath(), lines);
         return changed;
+    }
+    private String relativeJavaPath(File root, File file) {
+        try {
+            return root.toPath().relativize(file.toPath()).toString().replace("\\", "/");
+        } catch (IllegalArgumentException e) {
+            return file.getName();
+        }
     }
     private boolean isStudentEmail(String emailId, String expectedUsername) {
         return emailId != null && (emailId.equalsIgnoreCase(expectedUsername)
