@@ -1,4 +1,3 @@
-
 package autograder.reporting;
 
 import autograder.model.QuestionResult;
@@ -10,15 +9,19 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
+/**
+ * Writes two CSV files:
+ * - the scoresheet: a copy of the instructor's scoresheet template with the grade numerator filled in
+ * - the details report: per-question scores, manual marks, comments and submission issues
+ */
 public class CsvExporter {
-    // header for final grades
-    private static final List<String> finalHeaders = Arrays.asList(
-        "ID", "Username", "Last Name", "First Name", "Email", 
-        "Calculated Final Grade Numerator", 
-        "Calculated Final Grade Denominator");
-    
     // header for detailed report
     private static final List<String> detailHeaders = Arrays.asList(
         "Username", 
@@ -29,7 +32,49 @@ public class CsvExporter {
         "Q3 Score", "Q3 Manual Score", "Q3 Grading Status", "Q3 Comments",
         "Total Score", "Grading Status", "Validation Status", 
         "Submission Issues", "Q1 Issues", "Q2 Issues", "Q3 Issues");
-    
+
+    // scoresheet template rows and the columns we read or fill in
+    private final List<List<String>> rows;
+    private final int usernameColumn;
+    private final int scoreColumn;
+    private final int maximumColumn;
+    private final int firstNameColumn;
+    private final int lastNameColumn;
+
+    public CsvExporter(Path template) throws IOException {
+        rows = parse(Files.readString(template, StandardCharsets.UTF_8));
+        if (rows.isEmpty()) throw new IOException("The scoresheet is empty.");
+        List<String> header = rows.get(0);
+        usernameColumn = column(header, "Username");
+        scoreColumn = column(header, "Calculated Final Grade Numerator");
+        maximumColumn = column(header, "Calculated Final Grade Denominator");
+        firstNameColumn = column(header, "First Name");
+        lastNameColumn = column(header, "Last Name");
+        Set<String> seen = new HashSet<>();
+        for (int i = 1; i < rows.size(); i++) {
+            if (rows.get(i).size() != header.size()) throw new IOException("Invalid scoresheet row " + (i + 1));
+            if (!seen.add(username(rows.get(i).get(usernameColumn)))) throw new IOException("Duplicate username in scoresheet.");
+        }
+    }
+    private static int column(List<String> header, String name) throws IOException {
+        int index = header.indexOf(name);
+        if (index < 0) throw new IOException("Scoresheet is missing column: " + name);
+        return index;
+    }
+    // scoresheet username "#ping.lee.2023" -> "ping.lee.2023" for matching
+    private static String username(String value) {
+        return value.replaceFirst("^#", "").trim().toLowerCase(Locale.ROOT);
+    }
+    public Map<String, String> getRosterNames() {
+        Map<String, String> names = new LinkedHashMap<>();
+        for (int i = 1; i < rows.size(); i++) {
+            List<String> row = rows.get(i);
+            names.put(username(row.get(usernameColumn)),
+                    (row.get(firstNameColumn) + " " + row.get(lastNameColumn).replace("_", "")).trim());
+        }
+        return names;
+    }
+
     // username
     private String formatUsername(String username) {
         if (username == null) {
@@ -41,42 +86,6 @@ public class CsvExporter {
         }
 
         return "#" + username;
-    }
-
-    // split username to first and last name
-    private String[] fullname(String username) {
-        if (username == null || username.trim().isEmpty()) {
-            return new String[]{"", ""};
-        }
-        
-        username = username.trim();
-
-        while (username.startsWith("#")) {
-            username = username.substring(1);
-        }
-
-        // remove year
-        String[] parts = username.split("\\.");
-        if (parts.length > 0 && parts[parts.length-1].matches("\\d{4}")) {
-            parts = Arrays.copyOf(parts, parts.length - 1);
-        }
-
-        String firstName = "";
-        String lastName = "";
-        if (parts.length > 0) {
-            firstName = parts[0];
-            firstName = firstName.substring(0, 1).toUpperCase() + firstName.substring(1).toLowerCase();
-        }
-        for (int i = 1; i < parts.length; i++) {
-            if (!parts[i].isEmpty()) {
-                if (!lastName.isEmpty()) {
-                    lastName = lastName + " ";
-                }
-                lastName = lastName + parts[i].substring(0, 1).toUpperCase() + parts[i].substring(1).toLowerCase();
-            }
-        }
-
-        return new String[]{firstName, lastName};
     }
 
     // find question by ID
@@ -154,42 +163,32 @@ public class CsvExporter {
         return text.toString();
     }
 
-    // final grade csv
-    private String buildScoresCsv(List<StudentResult> results) {
-        List<List<String>> rows = new ArrayList<>();
-        rows.add(new ArrayList<>(finalHeaders));
-        int id = 0;
-        
-        for (StudentResult student : results) {
-            id++;
-            // unformatted username
-            String username = student.getSubmission().getUsername();
-            String[] names = fullname(username);
-            
-            String email = username.trim();
-            while (email.startsWith("#")) {
-                email = email.substring(1);
-            }
-            email = email + "@computing.smu.edu.sg";
-            username = formatUsername(username);
-
-            List<String> row = new ArrayList<>();
-            row.add(Integer.toString(id));
-            row.add(username);
-            row.add(names[1]);
-            row.add(names[0]);
-            row.add(email);
-
-            if (student.getQuestions().isEmpty()) {
-                row.add("");
-                row.add("");
-            } else {
-                row.add(Double.toString(student.getTotal()));
-                row.add(Double.toString(student.getMaximum()));
-            }
-            rows.add(row);
+    // final grade csv: fill the numerator column of the scoresheet template
+    private String buildScoresCsv(List<StudentResult> results) throws IOException {
+        Map<String, StudentResult> byUsername = new LinkedHashMap<>();
+        for (StudentResult result : results) {
+            String name = username(result.getSubmission().getUsername());
+            if (byUsername.put(name, result) != null) throw new IOException("Duplicate submission username: " + name);
+            if (!getRosterNames().containsKey(name)) throw new IOException("Student missing from scoresheet: " + name);
         }
-        return encode(rows);
+        List<List<String>> output = new ArrayList<>();
+        output.add(new ArrayList<>(rows.get(0)));
+        for (int i = 1; i < rows.size(); i++) {
+            List<String> row = new ArrayList<>(rows.get(i));
+            StudentResult result = byUsername.get(username(row.get(usernameColumn)));
+            if (result != null) {
+                if (result.getQuestions().isEmpty()) row.set(scoreColumn, "");
+                else {
+                    double maximum;
+                    try { maximum = Double.parseDouble(row.get(maximumColumn)); }
+                    catch (NumberFormatException ex) { throw new IOException("Invalid denominator for " + row.get(usernameColumn)); }
+                    if (maximum != result.getMaximum()) throw new IOException("Scoresheet denominator differs from grading maximum for " + row.get(usernameColumn));
+                    row.set(scoreColumn, Double.toString(result.getTotal()));
+                }
+            }
+            output.add(row);
+        }
+        return encode(output);
     }
 
     // detailed report csv
@@ -251,6 +250,7 @@ public class CsvExporter {
             throw new IOException("Student results cannot be null");
         }
 
+        // Build and validate both outputs before writing either file.
         String scoresCsv = buildScoresCsv(results);
         String detailsCsv = buildDetailsCsv(results);
 
@@ -265,4 +265,26 @@ public class CsvExporter {
         Files.writeString(detailsFile, detailsCsv, StandardCharsets.UTF_8);
     }
 
+    /** Handles quoted commas, escaped quotes, multiline fields and UTF-8 BOM. */
+    private static List<List<String>> parse(String text) throws IOException {
+        if (text.startsWith("﻿")) text = text.substring(1);
+        List<List<String>> records = new ArrayList<>();
+        List<String> row = new ArrayList<>();
+        StringBuilder field = new StringBuilder();
+        boolean quoted = false;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '"') {
+                if (quoted && i + 1 < text.length() && text.charAt(i + 1) == '"') { field.append('"'); i++; }
+                else quoted = !quoted;
+            } else if (c == ',' && !quoted) { row.add(field.toString()); field.setLength(0); }
+            else if ((c == '\r' || c == '\n') && !quoted) {
+                if (c == '\r' && i + 1 < text.length() && text.charAt(i + 1) == '\n') i++;
+                row.add(field.toString()); records.add(row); row = new ArrayList<>(); field.setLength(0);
+            } else field.append(c);
+        }
+        if (quoted) throw new IOException("Unclosed quoted field in scoresheet.");
+        if (field.length() > 0 || !row.isEmpty()) { row.add(field.toString()); records.add(row); }
+        return records;
+    }
 }

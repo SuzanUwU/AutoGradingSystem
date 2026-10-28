@@ -536,52 +536,33 @@ public class MainFrame extends JFrame {
         }
     }
 
-
-private void exportResults() {
-
-    // Let the user choose where to save the final grades CSV.
-    JFileChooser chooser = new JFileChooser();
-    chooser.setDialogTitle("Save Grading Results (also saves a details CSV)");
-    chooser.setSelectedFile(new File("gradedscores.csv"));
-
-    if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
-        return;
+    private void exportResults() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Save Scoresheet (also saves a details CSV)");
+        chooser.setSelectedFile(new File("gradedscores.csv"));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        Path target = chooser.getSelectedFile().toPath().toAbsolutePath();
+        if (!target.toString().toLowerCase(Locale.ROOT).endsWith(".csv")) target = Path.of(target + ".csv");
+        Path details = target.resolveSibling(target.getFileName().toString().replaceFirst("(?i)\\.csv$", "_detail.csv"));
+        Path template = Path.of("IS442-ScoreSheet.csv").toAbsolutePath().normalize();
+        if (target.normalize().equals(template) || details.normalize().equals(template)) {
+            JOptionPane.showMessageDialog(this, "Choose a different filename to preserve the original scoresheet.");
+            return;
+        }
+        if ((Files.exists(target) || Files.exists(details)) && JOptionPane.showConfirmDialog(this,
+                "Replace existing export file(s)?\n" + target + "\n" + details,
+                "Replace Export", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
+        try {
+            new CsvExporter(template).export(target, details, studentResults);
+            appendLog("Saved scores: " + target + "\nSaved marks and comments: " + details);
+            JOptionPane.showMessageDialog(this, "Saved:\n" + target + "\n" + details,
+                    "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException ex) {
+            appendLog("[ERROR] CSV export: " + ex.getMessage());
+            JOptionPane.showMessageDialog(this, "Could not save both CSV files.\n" + ex.getMessage(),
+                    "Export Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
-
-    // Get the selected file path.
-    Path target = chooser.getSelectedFile().toPath().toAbsolutePath();
-
-    // Make sure the final grades file ends in .csv.
-    if (!target.toString().toLowerCase(Locale.ROOT).endsWith(".csv")) {
-        target = Path.of(target + ".csv");
-    }
-
-    // Automatically create the second CSV beside the first one.
-    String detailsName = target.getFileName().toString().replaceFirst("(?i)\\.csv$", "_detail.csv");
-    Path details = target.resolveSibling(detailsName);
-
-    // Ask before replacing either existing file.
-    if ((Files.exists(target) || Files.exists(details)) && JOptionPane.showConfirmDialog(
-        this, "Replace existing export file(s)?\n" + target + "\n" + details, 
-        "Replace Export", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
-        return;
-    }
-
-    try {
-        // Export the current GUI results directly.
-        new CsvExporter().export(target, details, studentResults);
-
-        appendLog("Saved final grades: " + target + "\nSaved question details: " + details);
-
-        JOptionPane.showMessageDialog(this, "Saved:\n" + target + "\n" + details, "Export Complete", JOptionPane.INFORMATION_MESSAGE);
-
-    } catch (IOException ex) {
-        appendLog("[ERROR] CSV export: " + ex.getMessage());
-
-        JOptionPane.showMessageDialog(this, "Could not save both CSV files.\n" + ex.getMessage(), "Export Error", JOptionPane.ERROR_MESSAGE);
-    }
-}
-
 
     private static class GradingUpdate {
         final int row;
