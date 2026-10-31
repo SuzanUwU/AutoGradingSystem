@@ -17,11 +17,13 @@ import java.nio.file.Files;
 import java.nio.charset.StandardCharsets;
 import java.io.IOException;
 import autograder.reporting.CsvExporter;
+import autograder.reporting.PdfReportExporter;
 import java.util.regex.Pattern;
 import autograder.compilation.*;
 import autograder.execution.*;
 import autograder.grading.*;
 import autograder.model.*;
+import autograder.EdgeCaseRunner;
 
 public class MainFrame extends JFrame {
     private final JTextField submissionsField = new JTextField(Path.of(System.getProperty("user.dir"), "submissions").toAbsolutePath().normalize().toString(), 35);
@@ -31,6 +33,7 @@ public class MainFrame extends JFrame {
     private final JButton browseButton = new JButton("Browse");
     private final JButton validateButton = new JButton("Validate Submissions");
     private final JButton startGradingButton = new JButton("Start Grading");
+    private final JButton edgeCaseButton = new JButton("Run Edge Cases");
     private final JButton exportButton = new JButton("Export Results");
     private final JButton manualButton = new JButton("Enter Manual Score");
     private boolean busy;
@@ -131,10 +134,12 @@ public class MainFrame extends JFrame {
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         buttonPanel.add(validateButton);
         buttonPanel.add(startGradingButton);
+        buttonPanel.add(edgeCaseButton);
         buttonPanel.add(exportButton);
         buttonPanel.add(manualButton);
         manualButton.setEnabled(false);
         startGradingButton.setEnabled(false);
+        edgeCaseButton.setEnabled(false);
         exportButton.setEnabled(false);
         gbc.gridx = 0;
         gbc.gridy = 1;
@@ -349,6 +354,7 @@ public class MainFrame extends JFrame {
             if (!e.getValueIsAdjusting()) showSelectedCorrection();
         });
         startGradingButton.addActionListener(e -> startGrading());
+        edgeCaseButton.addActionListener(e -> runEdgeCases());
         manualButton.addActionListener(e -> enterManualScore());
         exportButton.addActionListener(e -> exportResults());
     }
@@ -629,9 +635,137 @@ public class MainFrame extends JFrame {
         submissionsField.setEnabled(enabled);
         startGradingButton.setEnabled(enabled && studentResults.stream()
                 .anyMatch(student -> !"Failed".equals(student.getSubmission().getOverallStatus())));
+        edgeCaseButton.setEnabled(enabled && studentResults.stream()
+                .anyMatch(student -> !"Failed".equals(student.getSubmission().getOverallStatus())));
         exportButton.setEnabled(enabled && studentResults.stream().anyMatch(StudentResult::isGraded));
         showSelectedStudent();
     }
+    private void runEdgeCases() {
+        File workspace = new File("workspace");
+        File edgecases = new File("edgecases");
+        File resources = new File("assessment/resources");
+
+        if (!workspace.isDirectory() || !edgecases.isDirectory() || !resources.isDirectory()) {
+            JOptionPane.showMessageDialog(this,
+                    "Cannot find workspace, edgecases, or assessment/resources.\nRun the application from the project folder.",
+                    "Missing Folder", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        List<SubmissionResult> currentBatch = new ArrayList<>();
+        for (StudentResult student : studentResults) currentBatch.add(student.getSubmission());
+
+        setControlsEnabled(false);
+        progressBar.setValue(0);
+        progressBar.setString("Starting edge-case tests...");
+        appendLog("\n=== EDGE CASE TESTING STARTED ===");
+
+        SwingWorker<List<EdgeCaseRunner.Result>, EdgeCaseUpdate> worker = new SwingWorker<List<EdgeCaseRunner.Result>, EdgeCaseUpdate>() {
+            @Override
+            protected List<EdgeCaseRunner.Result> doInBackground() {
+                EdgeCaseRunner runner = new EdgeCaseRunner(edgecases, resources);
+                ArrayList<EdgeCaseRunner.Result> results = new ArrayList<>();
+
+                for (int row = 0; row < currentBatch.size(); row++) {
+                    SubmissionResult submission = currentBatch.get(row);
+                    EdgeCaseRunner.Result result;
+
+                    if ("Failed".equals(submission.getOverallStatus())) {
+                        result = EdgeCaseRunner.skipped(submission.getUsername(), "Submission validation failed");
+                    } else {
+                        File studentRoot = findStudentRoot(workspace, submission.getUsername());
+                        result = studentRoot == null
+                                ? EdgeCaseRunner.skipped(submission.getUsername(), "Cannot uniquely locate the student folder")
+                                : runner.run(studentRoot, submission.getUsername());
+                    }
+
+                    results.add(result);
+                    publish(new EdgeCaseUpdate(row + 1, currentBatch.size(), result));
+                }
+
+                return results;
+            }
+
+            @Override
+            protected void process(List<EdgeCaseUpdate> updates) {
+                for (EdgeCaseUpdate update : updates) {
+                    EdgeCaseRunner.Result result = update.result;
+                    appendLog("Edge cases: " + result.getUsername() + " -> " + result.getSummary());
+
+                    if (!result.isSkipped()) {
+                        for (String qid : List.of("Q1a", "Q1b", "Q2a", "Q2b", "Q3")) {
+                            EdgeCaseRunner.QuestionResult q = result.get(qid);
+                            appendLog("  " + qid + ": " + q.getScoreText() + " (" + q.getStatus() + ")");
+                        }
+                    }
+
+                    updateProgress(update.processed, update.total);
+                }
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    List<EdgeCaseRunner.Result> results = get();
+                    saveEdgeCaseResultsCsv(results);
+
+                    int passed = results.stream().mapToInt(EdgeCaseRunner.Result::getPassed).sum();
+                    int total = results.stream().mapToInt(EdgeCaseRunner.Result::getTotal).sum();
+
+                    progressBar.setString("Edge cases finished - " + passed + "/" + total + " passed");
+                    appendLog("=== EDGE CASE TESTING FINISHED ===");
+
+                    JOptionPane.showMessageDialog(MainFrame.this,
+                            "Edge-case testing finished.\nPassed: " + passed + " / " + total
+                                    + "\nSaved: workspace\\edge_case_results.csv"
+                                    + "\n\nOfficial grading scores were not changed.",
+                            "Edge Cases Complete", JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception ex) {
+                    progressBar.setString("Edge-case testing could not complete");
+                    appendLog("[ERROR] Edge cases: " + ex);
+
+                    JOptionPane.showMessageDialog(MainFrame.this,
+                            "Edge-case testing could not complete. Check the System Log.",
+                            "Edge Case Error", JOptionPane.ERROR_MESSAGE);
+                } finally {
+                    setControlsEnabled(true);
+                }
+            }
+        };
+
+        worker.execute();
+    }
+
+    private void saveEdgeCaseResultsCsv(List<EdgeCaseRunner.Result> results) {
+        Path output = Path.of("workspace", "edge_case_results.csv");
+        ArrayList<String> lines = new ArrayList<>();
+        lines.add("Student,Q1a,Q1b,Q2a,Q2b,Q3,Passed,Failed,Status");
+
+        for (EdgeCaseRunner.Result result : results) {
+            lines.add(csvValue(result.getUsername()) + ","
+                    + edgeScore(result, "Q1a") + ","
+                    + edgeScore(result, "Q1b") + ","
+                    + edgeScore(result, "Q2a") + ","
+                    + edgeScore(result, "Q2b") + ","
+                    + edgeScore(result, "Q3") + ","
+                    + result.getPassed() + ","
+                    + result.getFailed() + ","
+                    + csvValue(result.isSkipped() ? result.getError() : "Completed"));
+        }
+
+        try {
+            Files.write(output, lines, StandardCharsets.UTF_8);
+            appendLog("Saved edge-case results: " + output);
+        } catch (IOException e) {
+            appendLog("[WARNING] Could not save edge_case_results.csv: " + e.getMessage());
+        }
+    }
+
+    private String edgeScore(EdgeCaseRunner.Result result, String qid) {
+        EdgeCaseRunner.QuestionResult q = result.get(qid);
+        return q == null ? "" : csvValue(q.getScoreText());
+    }
+
     private void startGrading() {
         File workspace = new File("workspace");
         File testers = new File("assessment/testers");
@@ -783,29 +917,58 @@ public class MainFrame extends JFrame {
 
     private void exportResults() {
         JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Save Scoresheet (also saves a details CSV)");
+        chooser.setDialogTitle("Save Results (CSV + PDF)");
         chooser.setSelectedFile(new File("gradedscores.csv"));
+
         if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
-        Path target = chooser.getSelectedFile().toPath().toAbsolutePath();
-        if (!target.toString().toLowerCase(Locale.ROOT).endsWith(".csv")) target = Path.of(target + ".csv");
-        Path details = target.resolveSibling(target.getFileName().toString().replaceFirst("(?i)\\.csv$", "_detail.csv"));
+
+        Path csvTarget = chooser.getSelectedFile().toPath().toAbsolutePath();
+        if (!csvTarget.toString().toLowerCase(Locale.ROOT).endsWith(".csv")) csvTarget = Path.of(csvTarget + ".csv");
+
+        Path pdfTarget = csvTarget.resolveSibling(
+                csvTarget.getFileName().toString().replaceFirst("(?i)\\.csv$", "_report.pdf"));
+
         Path template = Path.of("IS442-ScoreSheet.csv").toAbsolutePath().normalize();
-        if (target.normalize().equals(template) || details.normalize().equals(template)) {
-            JOptionPane.showMessageDialog(this, "Choose a different filename to preserve the original scoresheet.");
+
+        if (csvTarget.normalize().equals(template)) {
+            JOptionPane.showMessageDialog(this,
+                    "Choose a different filename to preserve the original scoresheet.");
             return;
         }
-        if ((Files.exists(target) || Files.exists(details)) && JOptionPane.showConfirmDialog(this,
-                "Replace existing export file(s)?\n" + target + "\n" + details,
-                "Replace Export", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
+
+        if ((Files.exists(csvTarget) || Files.exists(pdfTarget))
+                && JOptionPane.showConfirmDialog(this,
+                        "Replace existing export file(s)?\n" + csvTarget + "\n" + pdfTarget,
+                        "Replace Export", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
+
         try {
-            new CsvExporter(template).export(target, details, studentResults);
-            appendLog("Saved scores: " + target + "\nSaved marks and comments: " + details);
-            JOptionPane.showMessageDialog(this, "Saved:\n" + target + "\n" + details,
+            new CsvExporter(template).export(csvTarget, studentResults);
+            new PdfReportExporter().export(pdfTarget, studentResults);
+
+            appendLog("Saved scores: " + csvTarget);
+            appendLog("Saved PDF report: " + pdfTarget);
+
+            JOptionPane.showMessageDialog(this,
+                    "Saved:\n" + csvTarget + "\n" + pdfTarget,
                     "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+
         } catch (IOException ex) {
-            appendLog("[ERROR] CSV export: " + ex.getMessage());
-            JOptionPane.showMessageDialog(this, "Could not save both CSV files.\n" + ex.getMessage(),
+            appendLog("[ERROR] Export: " + ex.getMessage());
+            JOptionPane.showMessageDialog(this,
+                    "Could not export the CSV/PDF.\n" + ex.getMessage(),
                     "Export Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private static class EdgeCaseUpdate {
+        final int processed;
+        final int total;
+        final EdgeCaseRunner.Result result;
+
+        EdgeCaseUpdate(int processed, int total, EdgeCaseRunner.Result result) {
+            this.processed = processed;
+            this.total = total;
+            this.result = result;
         }
     }
 
