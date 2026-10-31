@@ -23,6 +23,7 @@ import autograder.compilation.*;
 import autograder.execution.*;
 import autograder.grading.*;
 import autograder.model.*;
+import autograder.testgen.TesterGenerator;
 import autograder.EdgeCaseRunner;
 
 public class MainFrame extends JFrame {
@@ -31,13 +32,17 @@ public class MainFrame extends JFrame {
     private final JComboBox<String> statusFilter = new JComboBox<>(
             new String[] {"All", "Needs Attention", "Valid", "Corrected", "Review", "Failed"});
     private final JButton browseButton = new JButton("Browse");
-    private final JButton validateButton = new JButton("Validate Submissions");
-    private final JButton startGradingButton = new JButton("Start Grading");
-    private final JButton edgeCaseButton = new JButton("Run Edge Cases");
+    private final JButton validateButton = new JButton("1. Validate Submissions");
+    private final JButton gradeOriginalButton = new JButton("Start Grading (Original Testers)");
+    private final JButton generateTestersButton = new JButton("Generate Testers");
+    private final JButton gradeGeneratedButton = new JButton("Grade with Generated Testers");
+    private final JButton edgeCaseButton = new JButton("Run Edge Cases (Bonus)");
     private final JButton exportButton = new JButton("Export Results");
-    private final JButton manualButton = new JButton("Enter Manual Score");
+    private final JButton manualButton = new JButton("Manual Score (Optional)");
     private boolean busy;
+    private boolean generatedTestersReadyForCurrentRun;
     private final ArrayList<StudentResult> studentResults = new ArrayList<>();
+    private final ArrayList<String> generatedTotals = new ArrayList<>();
     private final JButton clearLogButton = new JButton("Clear Log");
     private final JLabel totalLabel = new JLabel("Total: 0");
     private final JLabel validLabel = new JLabel("Valid: 0");
@@ -62,7 +67,7 @@ public class MainFrame extends JFrame {
         setMinimumSize(new Dimension(1050, 680));
         setSize(1200, 760);
         setLocationRelativeTo(null);
-        tableModel = new DefaultTableModel(new Object[] {"Student", "Structure", "Headers", "Status", "Grading", "Final Total"}, 0) {
+        tableModel = new DefaultTableModel(new Object[] {"Student", "Structure", "Headers", "Status", "Grading", "Total (Original Testers)", "Total (Generated Testers)"}, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false;
@@ -119,36 +124,76 @@ public class MainFrame extends JFrame {
         JPanel container = new JPanel(new BorderLayout(8, 8));
         JPanel setupPanel = new JPanel(new GridBagLayout());
         setupPanel.setBorder(BorderFactory.createTitledBorder("Submission Setup"));
+
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(6, 6, 6, 6);
         gbc.fill = GridBagConstraints.HORIZONTAL;
+
         gbc.gridx = 0;
         gbc.gridy = 0;
         setupPanel.add(new JLabel("Submissions Folder:"), gbc);
+
         gbc.gridx = 1;
         gbc.weightx = 1;
         setupPanel.add(submissionsField, gbc);
+
         gbc.gridx = 2;
         gbc.weightx = 0;
         setupPanel.add(browseButton, gbc);
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        buttonPanel.add(validateButton);
-        buttonPanel.add(startGradingButton);
-        buttonPanel.add(edgeCaseButton);
-        buttonPanel.add(exportButton);
-        buttonPanel.add(manualButton);
-        manualButton.setEnabled(false);
-        startGradingButton.setEnabled(false);
-        edgeCaseButton.setEnabled(false);
-        exportButton.setEnabled(false);
+
+        JPanel validatePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        validatePanel.add(validateButton);
         gbc.gridx = 0;
         gbc.gridy = 1;
         gbc.gridwidth = 3;
-        setupPanel.add(buttonPanel, gbc);
+        setupPanel.add(validatePanel, gbc);
+
+        JPanel gradingFlows = new JPanel(new GridLayout(1, 2, 10, 0));
+
+        JPanel originalPanel = new JPanel(new BorderLayout(6, 6));
+        originalPanel.setBorder(BorderFactory.createTitledBorder("Normal Grading - Professor's Original Testers"));
+        JLabel originalFlow = new JLabel("After validation: click Start Grading.");
+        originalPanel.add(originalFlow, BorderLayout.NORTH);
+        JPanel originalButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        originalButtons.add(gradeOriginalButton);
+        originalPanel.add(originalButtons, BorderLayout.CENTER);
+
+        JPanel generatedPanel = new JPanel(new BorderLayout(6, 6));
+        generatedPanel.setBorder(BorderFactory.createTitledBorder("Bonus - Generated Testers (Comparison)"));
+        JLabel generatedFlow = new JLabel("Generate Testers first, then Grade Generated. Comparison result is not exported.");
+        generatedPanel.add(generatedFlow, BorderLayout.NORTH);
+        JPanel generatedButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        generatedButtons.add(generateTestersButton);
+        generatedButtons.add(gradeGeneratedButton);
+        generatedPanel.add(generatedButtons, BorderLayout.CENTER);
+
+        gradingFlows.add(originalPanel);
+        gradingFlows.add(generatedPanel);
+
+        gbc.gridy = 2;
+        setupPanel.add(gradingFlows, gbc);
+
+        JPanel otherActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        otherActions.setBorder(BorderFactory.createTitledBorder("Other Actions"));
+        otherActions.add(edgeCaseButton);
+        otherActions.add(exportButton);
+        otherActions.add(manualButton);
+
+        gbc.gridy = 3;
+        setupPanel.add(otherActions, gbc);
+
+        manualButton.setEnabled(false);
+        gradeOriginalButton.setEnabled(false);
+        generateTestersButton.setEnabled(false);
+        gradeGeneratedButton.setEnabled(false);
+        edgeCaseButton.setEnabled(false);
+        exportButton.setEnabled(false);
+
         container.add(setupPanel, BorderLayout.NORTH);
         container.add(createSummaryPanel(), BorderLayout.SOUTH);
         return container;
     }
+
     private JPanel createSummaryPanel() {
         JPanel panel = new JPanel(new GridLayout(1, 5, 8, 0));
         panel.setBorder(BorderFactory.createTitledBorder("Submission Summary"));
@@ -232,6 +277,8 @@ public class MainFrame extends JFrame {
         resultTable.setRowHeight(25);
         resultTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         resultTable.getColumnModel().getColumn(0).setPreferredWidth(220);
+        resultTable.getColumnModel().getColumn(5).setPreferredWidth(145);
+        resultTable.getColumnModel().getColumn(6).setPreferredWidth(155);
         JPanel tablePanel = new JPanel(new BorderLayout());
         tablePanel.setBorder(BorderFactory.createTitledBorder("Students"));
         tablePanel.add(new JScrollPane(resultTable), BorderLayout.CENTER);
@@ -353,7 +400,9 @@ public class MainFrame extends JFrame {
         correctionTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) showSelectedCorrection();
         });
-        startGradingButton.addActionListener(e -> startGrading());
+        gradeOriginalButton.addActionListener(e -> startGrading(new File("assessment/testers"), "Original testers", false));
+        generateTestersButton.addActionListener(e -> generateTesters());
+        gradeGeneratedButton.addActionListener(e -> startGrading(new File("generated_testers"), "Generated testers", true));
         edgeCaseButton.addActionListener(e -> runEdgeCases());
         manualButton.addActionListener(e -> enterManualScore());
         exportButton.addActionListener(e -> exportResults());
@@ -382,6 +431,7 @@ public class MainFrame extends JFrame {
         tableModel.setRowCount(0);
         correctionTableModel.setRowCount(0);
         studentResults.clear();
+        generatedTotals.clear();
         mostFixesLabel.setText("Most fixes: -");
         correctionDetailArea.setText("Validation in progress...");
         searchField.setText("");
@@ -393,8 +443,10 @@ public class MainFrame extends JFrame {
         progressBar.setMaximum(100);
         progressBar.setValue(0);
         progressBar.setString("Starting...");
+        generatedTestersReadyForCurrentRun = false;
         setControlsEnabled(false);
-        AutoGradingService service = new AutoGradingService(new File("workspace"));
+        File workspace = new File("workspace");
+        AutoGradingService service = new AutoGradingService(workspace);
         SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() {
@@ -422,7 +474,7 @@ public class MainFrame extends JFrame {
                     if (!studentResults.isEmpty()) {
                         refreshCorrectionTable();
                         saveCorrectionHistoryCsv();
-                        progressBar.setString("Validation complete - click Start Grading");
+                        progressBar.setString("Validation complete - choose Normal Grading or Generated Testers bonus");
                     } else {
                         detailsArea.setText("No submissions were processed.\nCheck the System Log for details.");
                         progressBar.setString("No submissions processed");
@@ -439,8 +491,10 @@ public class MainFrame extends JFrame {
     private void addSubmissionResult(SubmissionResult result) {
         StudentResult student = new StudentResult(result);
         studentResults.add(student);
+        generatedTotals.add("");
         tableModel.addRow(new Object[] {
-                result.getUsername(), result.getStructureStatus(), result.getHeaderStatus(), result.getOverallStatus(), "Not graded", ""
+                result.getUsername(), result.getStructureStatus(), result.getHeaderStatus(), result.getOverallStatus(),
+                "Not graded", "", ""
         });
         updateSummary();
         refreshCorrectionTable();
@@ -633,10 +687,12 @@ public class MainFrame extends JFrame {
         browseButton.setEnabled(enabled);
         validateButton.setEnabled(enabled);
         submissionsField.setEnabled(enabled);
-        startGradingButton.setEnabled(enabled && studentResults.stream()
-                .anyMatch(student -> !"Failed".equals(student.getSubmission().getOverallStatus())));
-        edgeCaseButton.setEnabled(enabled && studentResults.stream()
-                .anyMatch(student -> !"Failed".equals(student.getSubmission().getOverallStatus())));
+        boolean hasValidSubmission = studentResults.stream()
+                .anyMatch(student -> !"Failed".equals(student.getSubmission().getOverallStatus()));
+        gradeOriginalButton.setEnabled(enabled && hasValidSubmission);
+        generateTestersButton.setEnabled(enabled && hasValidSubmission);
+        gradeGeneratedButton.setEnabled(enabled && hasValidSubmission && generatedTestersReadyForCurrentRun && generatedTestersReady());
+        edgeCaseButton.setEnabled(enabled && hasValidSubmission);
         exportButton.setEnabled(enabled && studentResults.stream().anyMatch(StudentResult::isGraded));
         showSelectedStudent();
     }
@@ -645,7 +701,7 @@ public class MainFrame extends JFrame {
         File edgecases = new File("edgecases");
         File resources = new File("assessment/resources");
 
-        if (!workspace.isDirectory() || !edgecases.isDirectory() || !resources.isDirectory()) {
+        if (workspace == null || !workspace.isDirectory() || !edgecases.isDirectory() || !resources.isDirectory()) {
             JOptionPane.showMessageDialog(this,
                     "Cannot find workspace, edgecases, or assessment/resources.\nRun the application from the project folder.",
                     "Missing Folder", JOptionPane.ERROR_MESSAGE);
@@ -766,18 +822,55 @@ public class MainFrame extends JFrame {
         return q == null ? "" : csvValue(q.getScoreText());
     }
 
-    private void startGrading() {
+    private void generateTesters() {
+        Path dataFolder = Path.of("assessment", "test-data");
+        Path outputFolder = Path.of("generated_testers");
+
+        try {
+            TesterGenerator generator = new TesterGenerator(dataFolder, outputFolder);
+            List<Path> generated = generator.generateAll();
+
+            appendLog("\n=== PARAMETERIZED TESTER GENERATION ===");
+            for (Path file : generated) appendLog("Generated: " + file);
+            appendLog("Generated testers are ready. Click Grade with Generated Testers.");
+
+            generatedTestersReadyForCurrentRun = true;
+            gradeGeneratedButton.setEnabled(!busy && !studentResults.isEmpty() && generatedTestersReady());
+            JOptionPane.showMessageDialog(this,
+                    generated.size() + " tester files generated successfully.\n\n"
+                            + "Next: click Grade with Generated Testers.",
+                    "Testers Generated",
+                    JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException e) {
+            appendLog("[ERROR] Tester generation: " + e.getMessage());
+            JOptionPane.showMessageDialog(this,
+                    "Could not generate tester files.\n" + e.getMessage(),
+                    "Tester Generation Error",
+                    JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private boolean generatedTestersReady() {
+        File folder = new File("generated_testers");
+        if (!folder.isDirectory()) return false;
+        for (String fileName : new String[] {"Q1aTester.java", "Q1bTester.java", "Q2aTester.java", "Q2bTester.java", "Q3Tester.java"}) {
+            if (!new File(folder, fileName).isFile()) return false;
+        }
+        return true;
+    }
+
+    private void startGrading(File testers, String testerLabel, boolean generatedMode) {
         File workspace = new File("workspace");
-        File testers = new File("assessment/testers");
         File resources = new File("assessment/resources");
 
-        if (!workspace.isDirectory()
+        if (workspace == null
+                || !workspace.isDirectory()
                 || !testers.isDirectory()
                 || !resources.isDirectory()) {
 
             JOptionPane.showMessageDialog(this,
-                    "Cannot find workspace, assessment/testers, "
-                            + "or assessment/resources.\n"
+                    "Cannot find workspace, tester folder, or assessment/resources.\n"
+                            + "Tester folder: " + testers.getPath() + "\n"
                             + "Run the application from the project folder.",
                     "Missing Folder",
                     JOptionPane.ERROR_MESSAGE);
@@ -791,8 +884,8 @@ public class MainFrame extends JFrame {
 
         setControlsEnabled(false);
         progressBar.setValue(0);
-        progressBar.setString("Starting grading...");
-        appendLog("\n=== GRADING STARTED ===");
+        progressBar.setString("Starting grading with " + testerLabel + "...");
+        appendLog("\n=== GRADING STARTED: " + testerLabel + " ===");
 
         SwingWorker<Void, GradingUpdate> worker = new SwingWorker<Void, GradingUpdate>() {
             @Override
@@ -831,23 +924,44 @@ public class MainFrame extends JFrame {
             protected void process(List<GradingUpdate> updates) {
                 for (GradingUpdate update : updates) {
                     StudentResult student = studentResults.get(update.row);
-                    student.setGradingResults(update.questions, update.error);
+
+                    if (generatedMode) {
+                        if (!update.error.isEmpty() && update.questions.isEmpty()) {
+                            generatedTotals.set(update.row, "Failed");
+                        } else {
+                            double total = update.questions.stream().mapToDouble(QuestionResult::getScore).sum();
+                            double maximum = update.questions.stream().mapToDouble(QuestionResult::getMaxScore).sum();
+                            generatedTotals.set(update.row, total + " / " + maximum);
+                        }
+                    } else {
+                        student.setGradingResults(update.questions, update.error);
+                    }
+
                     refreshStudentRow(update.row);
-                    appendLog("Grading: " + student.getSubmission().getUsername());
+                    appendLog("Grading with " + testerLabel + ": " + student.getSubmission().getUsername());
                     for (QuestionResult q : update.questions) appendLog("  " + q);
-                    if (!update.error.isEmpty()) appendLog("[ERROR] " + update.error);
-                    else appendLog("Final total: " + student.getTotal() + " / " + student.getMaximum());
+                    if (!update.error.isEmpty()) {
+                        appendLog("[ERROR] " + update.error);
+                    } else if (generatedMode) {
+                        appendLog("Generated tester total: " + generatedTotals.get(update.row));
+                    } else {
+                        appendLog("Original tester total: " + student.getTotal() + " / " + student.getMaximum());
+                    }
                     updateProgress(update.row + 1, currentBatch.size());
                 }
-                showSelectedStudent();
+                if (!generatedMode) showSelectedStudent();
             }
             @Override
             protected void done() {
                 try {
                     get();
-                    long attention = studentResults.stream().filter(StudentResult::needsAttention).count();
-                    progressBar.setString("Grading finished - " + attention + " student(s) need attention");
-                    appendLog("=== GRADING FINISHED ===");
+                    if (generatedMode) {
+                        progressBar.setString("Generated tester grading finished");
+                    } else {
+                        long attention = studentResults.stream().filter(StudentResult::needsAttention).count();
+                        progressBar.setString("Original grading finished - " + attention + " student(s) need attention");
+                    }
+                    appendLog("=== GRADING FINISHED: " + testerLabel + " ===");
                 } catch (Exception ex) {
                     progressBar.setString("Grading could not complete");
                     appendLog("[ERROR] " + ex);
@@ -870,6 +984,7 @@ public class MainFrame extends JFrame {
         tableModel.setValueAt(submission.getOverallStatus(), row, 3);
         tableModel.setValueAt(student.getGradingStatus(), row, 4);
         tableModel.setValueAt(student.getQuestions().isEmpty() ? "" : student.getTotal() + " / " + student.getMaximum(), row, 5);
+        tableModel.setValueAt(row < generatedTotals.size() ? generatedTotals.get(row) : "", row, 6);
     }
 
     private void enterManualScore() {

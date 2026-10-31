@@ -6,6 +6,11 @@ import autograder.validation.ZipExtractor;
 import autograder.validation.TemplateComparator;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -66,9 +71,7 @@ public class AutoGradingService {
 
     private void cleanWorkspace() throws IOException {
         if (!workspaceFolder.exists()) {
-            if (!workspaceFolder.mkdirs()) {
-                throw new IOException("Cannot create workspace folder.");
-            }
+            if (!workspaceFolder.mkdirs()) throw new IOException("Cannot create workspace folder.");
             return;
         }
 
@@ -76,29 +79,56 @@ public class AutoGradingService {
         if (files == null) return;
 
         for (File file : files) {
-            if (file.isFile() && file.getName().equalsIgnoreCase("correction_history.csv")) {
-                continue;
-            }
-
-            deleteRecursively(file);
+            deleteDirectory(file.toPath());
         }
     }
 
-    private void deleteRecursively(File file) throws IOException {
-    if (file.isDirectory()) {
-        File[] children = file.listFiles();
+    private void deleteDirectory(Path root) throws IOException {
+        if (!Files.exists(root)) return;
 
-        if (children != null) {
-            for (File child : children) {
-                deleteRecursively(child);
+        Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                deleteWithRetry(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                if (exc != null) throw exc;
+                deleteWithRetry(dir);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
+    private void deleteWithRetry(Path path) throws IOException {
+        final int maxAttempts = 40;
+        final long waitMillis = 250;
+        IOException lastException = null;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                File file = path.toFile();
+                if (file.exists() && !file.canWrite()) file.setWritable(true);
+                Files.deleteIfExists(path);
+                return;
+            } catch (IOException e) {
+                lastException = e;
+                if (attempt < maxAttempts) {
+                    try {
+                        Thread.sleep(waitMillis);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("Workspace cleanup interrupted: " + path, interrupted);
+                    }
+                }
             }
         }
+
+        throw new IOException("Cannot delete after " + maxAttempts + " attempts: " + path, lastException);
     }
 
-    if (!file.delete() && file.exists()) {
-        throw new IOException("Cannot delete: " + file.getPath());
-    }
-}
     // for details csv
     private String getQuestionForFile(File javaFile, File root) {
         try {
