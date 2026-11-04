@@ -1,0 +1,6 @@
+# file;course;expected (DATA_EXCEPTION means DataException is expected)
+is442.txt;IS101;DATA_EXCEPTION
+studentstester.txt;SMU101;DATA_EXCEPTION
+studentstester.txt;CS101;LEE Teck Yang-4.0
+studentstester.txt;CS102;Jason LEE-4.0
+studentstester.txt;CS103;TAY Evelyn-4.0

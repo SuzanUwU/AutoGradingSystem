@@ -1,0 +1,4 @@
+# typed inputs;expected
+int:2|int:4;6
+int:2|boolean:false|double:4.0|string:two;2
+int:9|int:2|int:10|int:3|int:5|int:8;20

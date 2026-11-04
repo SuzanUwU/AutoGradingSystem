@@ -3,26 +3,42 @@ import autograder.model.SubmissionResult;
 import autograder.validation.SubmissionCorrector;
 import autograder.validation.SubmissionValidator;
 import autograder.validation.ZipExtractor;
+import autograder.validation.TemplateComparator;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.Map;
 import java.util.function.Consumer;
+import java.util.Map;
+
+/** Coordinates the CS102 validation batch. Delegates file operations and reporting. */
 public class AutoGradingService {
-    private static final String ZIP_EXTENSION = ".zip";
+    // TODO: read from config/grader.properties once ConfigLoader is implemented.
+    private static final String TEMPLATE_FOLDER = "assessment/template";
     private final File workspaceFolder;
+    private final TemplateComparator templateComparator;
+    private final SubmissionInspector inspector = new SubmissionInspector();
+    private final SubmissionDetailsBuilder detailsBuilder = new SubmissionDetailsBuilder();
     public AutoGradingService(File workspaceFolder) {
         this.workspaceFolder = workspaceFolder;
+        this.templateComparator = new TemplateComparator(new File(TEMPLATE_FOLDER));
     }
+    /** Validates each ZIP and reports progress to the Swing UI. */
     public void processSubmissions(File submissionsFolder, Listener listener) {
-        File[] zipFiles = findZipFiles(submissionsFolder);
+        File[] zipFiles = SubmissionFileUtils.findZipFiles(submissionsFolder);
         if (zipFiles.length == 0) {
-            listener.onLog("No ZIP submissions found.");
+            listener.onLog("No ZIP submissions found in: " + submissionsFolder.getAbsolutePath());
             listener.onProgress(0, 0);
             return;
         }
+
+        try {
+            new WorkspaceCleaner(workspaceFolder).cleanWorkspace();
+        } catch (IOException e) {
+            listener.onLog("[ERROR] Could not clear old workspace: " + e.getMessage());
+            listener.onProgress(0, zipFiles.length);
+            return;
+        }
+
         listener.onLog("Found " + zipFiles.length + " submission(s).\n");
         int completed = 0;
         int failed = 0;
@@ -37,7 +53,7 @@ public class AutoGradingService {
                 listener.onSubmissionFinished(result);
                 completed++;
             } catch (IOException e) {
-                String username = getUsernameFromFileName(zipFile.getName());
+                String username = SubmissionFileUtils.getUsernameFromFileName(zipFile.getName());
                 listener.onLog("[ERROR] Could not process " + zipFile.getName() + ": " + e.getMessage());
                 listener.onSubmissionFinished(createFailedResult(username, zipFile, e));
                 failed++;
@@ -49,12 +65,20 @@ public class AutoGradingService {
         listener.onLog("Completed: " + completed);
         listener.onLog("Failed: " + failed);
     }
+
+    // for details csv
+
+
+    // record header issues
+
+
+    /** Runs extraction, correction, reinspection and result construction for one ZIP. */
     private SubmissionResult processSubmission(File zipFile, SubmissionState state, Consumer<String> logger) throws IOException {
         ZipExtractor zipExtractor = new ZipExtractor();
         SubmissionValidator validator = new SubmissionValidator(logger);
-        SubmissionCorrector corrector = new SubmissionCorrector(logger);
+        SubmissionCorrector corrector = new SubmissionCorrector(logger, state::addSubmissionIssue);
         String fileName = zipFile.getName();
-        String submissionName = removeZipExtension(fileName);
+        String submissionName = SubmissionFileUtils.removeZipExtension(fileName);
         String expectedUsername = validator.validateAndGetUsername(zipFile);
         File destination = new File(workspaceFolder, submissionName);
         logger.accept("Processing: " + fileName);
@@ -67,174 +91,50 @@ public class AutoGradingService {
         logger.accept("\nChecking submission...");
         state.stage = Stage.VALIDATION;
         Map<String, File> questionFolders = validator.findQuestionFolders(correctedRoot);
-        displayQuestionFolders(questionFolders, validator, expectedUsername, logger);
+        inspector.displayQuestionFolders(questionFolders, validator, expectedUsername, logger, state);
+
+        // Must run before correctHeaders(), which edits the students' files.
+        boolean templateSubmission = templateComparator.isUnmodifiedTemplate(correctedRoot);
+        if (templateSubmission) {
+            logger.accept("[WARNING] Submission appears to be the original resource folder: "
+                    + "no Java file differs from the template.");
+            state.addSubmissionIssue("Original resource folder submitted");
+            state.addAnomaly("Original resource/template folder submitted");
+        }
+
         logger.accept("\nCorrecting Java headers...");
+
+        // for details csv ; check file headers
+        inspector.recordHeaderIssues(correctedRoot, expectedUsername, validator, state);
+
         state.stage = Stage.HEADERS;
         corrector.correctHeaders(correctedRoot, expectedUsername);
         state.stage = Stage.NONE;
-        FinalInspection inspection = inspectFinalSubmission(correctedRoot, expectedUsername, validator);
+        FinalInspection inspection = inspector.inspectFinalSubmission(correctedRoot, expectedUsername, validator);
+        inspector.recordOpenIssues(correctedRoot, expectedUsername, validator, inspection, state);
         String structureStatus = inspection.structureIssue ? "Review" : state.structureCorrected ? "Corrected" : "Valid";
         String headerStatus = inspection.headerIssue ? "Review" : state.headerCorrected ? "Corrected" : "Valid";
-        String overallStatus = getOverallStatus(structureStatus, headerStatus);
-        String details = buildDetails(zipFile, expectedUsername, correctedRoot, structureStatus, headerStatus,
+        String overallStatus = templateSubmission ? "Review" : SubmissionFileUtils.getOverallStatus(structureStatus, headerStatus);
+        String details = detailsBuilder.buildDetails(zipFile, expectedUsername, correctedRoot, structureStatus, headerStatus,
                 overallStatus, inspection, state, validator);
-        return new SubmissionResult(expectedUsername, structureStatus, headerStatus, overallStatus, details);
+
+        return new SubmissionResult(expectedUsername, structureStatus, headerStatus, overallStatus, details,
+                state.submissionIssues, state.q1Issues, state.q2Issues, state.q3Issues,
+                state.folderFixes, state.nameFixes, state.emailFixes, state.openIssues, state.anomalies);
     }
-    private FinalInspection inspectFinalSubmission(File root, String username, SubmissionValidator validator) throws IOException {
-        FinalInspection inspection = new FinalInspection();
-        inspection.structureIssue = !root.isDirectory() || !root.getName().equalsIgnoreCase(username);
-        inspection.questionFolders = validator.findQuestionFolders(root);
-        for (Map.Entry<String, File> entry : inspection.questionFolders.entrySet()) {
-            File questionFolder = entry.getValue();
-            if (questionFolder == null) {
-                inspection.structureIssue = true;
-                continue;
-            }
-            for (String fileName : getRequiredFiles(entry.getKey())) {
-                if (!new File(questionFolder, fileName).isFile()) inspection.structureIssue = true;
-            }
-        }
-        collectJavaFiles(root, inspection.javaFiles);
-        inspection.javaFiles.sort(Comparator.comparing(File::getPath));
-        for (File javaFile : inspection.javaFiles) {
-            if (!validator.hasValidHeader(javaFile, username)) inspection.headerIssue = true;
-        }
-        return inspection;
-    }
-    private String buildDetails(File zipFile, String username, File root, String structureStatus, String headerStatus,
-            String overallStatus, FinalInspection inspection, SubmissionState state, SubmissionValidator validator) throws IOException {
-        StringBuilder details = new StringBuilder();
-        details.append("STUDENT\nUsername: ").append(username)
-                .append("\nOverall status: ").append(overallStatus).append("\n");
-        details.append("\nSUBMISSION\n[OK] ZIP filename identifies: ").append(username)
-                .append("\nZIP file: ").append(zipFile.getName())
-                .append("\nUsername folder: ").append(structureStatus)
-                .append("\nWorkspace path: ").append(root.getPath()).append("\n");
-        details.append("\nQUESTION FOLDERS\n");
-        for (Map.Entry<String, File> entry : inspection.questionFolders.entrySet()) {
-            details.append(entry.getValue() == null ? "[MISSING] " : "[OK] ")
-                    .append(entry.getKey()).append("\n");
-        }
-        details.append("\nREQUIRED JAVA FILES\n");
-        for (Map.Entry<String, File> entry : inspection.questionFolders.entrySet()) {
-            if (entry.getValue() == null) continue;
-            for (String fileName : getRequiredFiles(entry.getKey())) {
-                File javaFile = new File(entry.getValue(), fileName);
-                details.append(javaFile.isFile() ? "[OK] " : "[MISSING] ")
-                        .append(entry.getKey()).append("/").append(fileName).append("\n");
-            }
-        }
-        details.append("\nJAVA HEADERS - FINAL STATE\n");
-        if (inspection.javaFiles.isEmpty()) {
-            details.append("[MISSING] No Java files found\n");
-        } else {
-            for (File javaFile : inspection.javaFiles) {
-                String path = root.toPath().relativize(javaFile.toPath()).toString();
-                String[] header = validator.getHeaderValues(javaFile);
-                boolean valid = validator.hasValidHeader(javaFile, username);
-                details.append(valid ? "[OK] " : "[REVIEW] ").append(path).append("\n")
-                        .append("    Name: ").append(valueOrMissing(header[0])).append("\n")
-                        .append("    Email ID: ").append(valueOrMissing(header[1])).append("\n");
-            }
-        }
-        details.append("\nSUMMARY\nStructure: ").append(structureStatus)
-                .append("\nHeaders: ").append(headerStatus).append("\n")
-                .append("\nCHANGES / WARNINGS\n");
-        if (state.notableMessages.isEmpty()) details.append("None\n");
-        else for (String message : state.notableMessages) details.append(message).append("\n");
-        return details.toString();
-    }
+
     private SubmissionResult createFailedResult(String username, File zipFile, IOException e) {
         String details = "STUDENT\nUsername: " + username
                 + "\nOverall status: Failed"
                 + "\n\nSUBMISSION\nZIP file: " + zipFile.getName()
                 + "\n\nERROR\n" + e.getMessage();
-        return new SubmissionResult(username, "Failed", "Failed", "Failed", details);
+        ArrayList<String> openIssues = new ArrayList<>();
+        openIssues.add("Processing failed: " + e.getMessage());
+        return new SubmissionResult(username, "Failed", "Failed", "Failed", details,
+                new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(),
+                new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), openIssues, new ArrayList<String>());
     }
-    private void displayQuestionFolders(Map<String, File> folders, SubmissionValidator validator,
-            String username, Consumer<String> logger) throws IOException {
-        for (Map.Entry<String, File> entry : folders.entrySet()) {
-            String question = entry.getKey();
-            File folder = entry.getValue();
-            if (folder == null) {
-                logger.accept("[MISSING] " + question + " folder not found.");
-                continue;
-            }
-            logger.accept("[OK] " + question + " found: " + folder.getPath());
-            for (String fileName : getRequiredFiles(question)) {
-                File javaFile = new File(folder, fileName);
-                if (validator.hasFile(folder, fileName)) {
-                    logger.accept("    [OK] " + fileName);
-                    validator.validateHeader(javaFile, username);
-                } else {
-                    logger.accept("    [MISSING] " + fileName);
-                }
-            }
-        }
-    }
-    private String[] getRequiredFiles(String question) {
-        if (question.equals("Q1")) return new String[] {"Q1a.java", "Q1b.java"};
-        if (question.equals("Q2")) return new String[] {"Q2a.java", "Q2b.java"};
-        if (question.equals("Q3")) return new String[] {"Q3.java"};
-        return new String[0];
-    }
-    private String getOverallStatus(String structureStatus, String headerStatus) {
-        if (structureStatus.equals("Review") || headerStatus.equals("Review")) return "Review";
-        if (structureStatus.equals("Corrected") || headerStatus.equals("Corrected")) return "Corrected";
-        return "Valid";
-    }
-    private String valueOrMissing(String value) {
-        return value == null || value.isEmpty() ? "MISSING" : value;
-    }
-    private void collectJavaFiles(File folder, ArrayList<File> javaFiles) {
-        if (folder == null || !folder.isDirectory()) return;
-        File[] files = folder.listFiles();
-        if (files == null) return;
-        for (File file : files) {
-            if (file.isDirectory()) collectJavaFiles(file, javaFiles);
-            else if (file.getName().toLowerCase().endsWith(".java")) javaFiles.add(file);
-        }
-    }
-    private File[] findZipFiles(File folder) {
-        if (folder == null || !folder.isDirectory()) return new File[0];
-        File[] files = folder.listFiles(this::isZipFile);
-        if (files == null) return new File[0];
-        Arrays.sort(files, Comparator.comparing(File::getName));
-        return files;
-    }
-    private boolean isZipFile(File file) {
-        return file.isFile() && file.getName().toLowerCase().endsWith(ZIP_EXTENSION);
-    }
-    private String removeZipExtension(String fileName) {
-        return fileName.substring(0, fileName.length() - ZIP_EXTENSION.length());
-    }
-    private String getUsernameFromFileName(String fileName) {
-        String name = fileName.toLowerCase().endsWith(ZIP_EXTENSION) ? removeZipExtension(fileName) : fileName;
-        return name.replaceFirst("^\\d{4}-\\d{4}-", "");
-    }
-    private enum Stage { NONE, STRUCTURE, VALIDATION, HEADERS }
-    private static class SubmissionState {
-        private Stage stage = Stage.NONE;
-        private boolean structureCorrected;
-        private boolean headerCorrected;
-        private final ArrayList<String> notableMessages = new ArrayList<>();
-        private void track(String message) {
-            String text = message.trim();
-            if (text.startsWith("[CORRECTED]")) {
-                if (stage == Stage.STRUCTURE) structureCorrected = true;
-                if (stage == Stage.HEADERS) headerCorrected = true;
-                notableMessages.add(text);
-            } else if (text.startsWith("[WARNING]") || text.startsWith("[MISSING]") || text.startsWith("[ERROR]")) {
-                notableMessages.add(text);
-            }
-        }
-    }
-    private static class FinalInspection {
-        private boolean structureIssue;
-        private boolean headerIssue;
-        private Map<String, File> questionFolders;
-        private final ArrayList<File> javaFiles = new ArrayList<>();
-    }
+
     public interface Listener {
         void onLog(String message);
         void onSubmissionFinished(SubmissionResult result);

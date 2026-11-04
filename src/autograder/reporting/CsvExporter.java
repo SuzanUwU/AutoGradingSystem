@@ -1,12 +1,13 @@
 package autograder.reporting;
 
-import autograder.model.QuestionResult;
 import autograder.model.StudentResult;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,34 +15,26 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+// write a csv file with the total marks for each student
 public class CsvExporter {
+    // scoresheet template rows and the columns we read or fill in
     private final List<List<String>> rows;
+    private final int orgDefinedIdColumn;
+    private final int emailColumn;
+    private final int endOfLineColumn;
     private final int usernameColumn;
     private final int scoreColumn;
     private final int maximumColumn;
     private final int firstNameColumn;
     private final int lastNameColumn;
 
-    /** Creates a scoresheet directly from the grading results, without a template. */
-    public CsvExporter() {
-        rows = new ArrayList<>();
-        rows.add(List.of("OrgDefinedId", "Username", "First Name", "Last Name", "Email",
-                "Calculated Final Grade Numerator", "Calculated Final Grade Denominator",
-                "End-of-Line Indicator"));
-        orgDefinedIdColumn = 0;
-        usernameColumn = 1;
-        firstNameColumn = 2;
-        lastNameColumn = 3;
-        emailColumn = 4;
-        scoreColumn = 5;
-        maximumColumn = 6;
-        endOfLineColumn = 7;
-    }
-
     public CsvExporter(Path template) throws IOException {
         rows = parse(Files.readString(template, StandardCharsets.UTF_8));
         if (rows.isEmpty()) throw new IOException("The scoresheet is empty.");
         List<String> header = rows.get(0);
+        orgDefinedIdColumn = column(header, "OrgDefinedId");
+        emailColumn = column(header, "Email");
+        endOfLineColumn = column(header, "End-of-Line Indicator");
         usernameColumn = column(header, "Username");
         scoreColumn = column(header, "Calculated Final Grade Numerator");
         maximumColumn = column(header, "Calculated Final Grade Denominator");
@@ -58,10 +51,13 @@ public class CsvExporter {
         if (index < 0) throw new IOException("Scoresheet is missing column: " + name);
         return index;
     }
+
+    // scoresheet username "#ping.lee.2023" -> "ping.lee.2023" for matching
     private static String username(String value) {
         return value.replaceFirst("^#", "").trim().toLowerCase(Locale.ROOT);
     }
-    public Map<String, String> getRosterNames() {
+
+        public Map<String, String> getRosterNames() {
         Map<String, String> names = new LinkedHashMap<>();
         for (int i = 1; i < rows.size(); i++) {
             List<String> row = rows.get(i);
@@ -70,28 +66,11 @@ public class CsvExporter {
         }
         return names;
     }
-    public void export(Path scoresFile, Path detailsFile, List<StudentResult> results) throws IOException {
-        Map<String, StudentResult> byUsername = new LinkedHashMap<>();
-        for (StudentResult result : results) {
-            String name = username(result.getSubmission().getUsername());
-            if (byUsername.put(name, result) != null) throw new IOException("Duplicate submission username: " + name);
-            if (!getRosterNames().containsKey(name)) throw new IOException("Student missing from scoresheet: " + name);
-        }
-        List<List<String>> output = new ArrayList<>();
-        output.add(new ArrayList<>(rows.get(0)));
+    
+    // generate new id for new students
+    private String nextOrgDefinedId() throws IOException {
+        long maxId = -1;
         for (int i = 1; i < rows.size(); i++) {
-<<<<<<< Updated upstream
-            List<String> row = new ArrayList<>(rows.get(i));
-            StudentResult result = byUsername.get(username(row.get(usernameColumn)));
-            if (result != null) {
-                if (result.getQuestions().isEmpty()) row.set(scoreColumn, "");
-                else {
-                    double maximum;
-                    try { maximum = Double.parseDouble(row.get(maximumColumn)); }
-                    catch (NumberFormatException ex) { throw new IOException("Invalid denominator for " + row.get(usernameColumn)); }
-                    if (maximum != result.getMaximum()) throw new IOException("Scoresheet denominator differs from grading maximum for " + row.get(usernameColumn));
-                    row.set(scoreColumn, Double.toString(result.getTotal()));
-=======
             String value = rows.get(i).get(orgDefinedIdColumn).trim().replaceFirst("^#", "");
             try {
                 maxId = Math.max(maxId, Long.parseLong(value));
@@ -100,7 +79,6 @@ public class CsvExporter {
             }
         }
         if (maxId < 0) {
-            if (rows.size() == 1) return "#00000001";
             throw new IOException("No existing OrgDefinedId found in scoresheet.");
         }
         return "#" + String.format(Locale.ROOT, "%08d", maxId + 1);
@@ -163,47 +141,36 @@ public class CsvExporter {
             if (!parts[i].isEmpty()) {
                 if (!lastName.isEmpty()) {
                     lastName = lastName + " ";
->>>>>>> Stashed changes
                 }
-            }
-            output.add(row);
-        }
-        List<List<String>> details = new ArrayList<>();
-        details.add(List.of("Username", "Question", "Autograded Score", "Manual Marked?", "Manual Score", "Manual Comment", "Final Score", "Maximum Score", "Grading Status", "Validation Status"));
-        for (StudentResult result : results) {
-            String name = result.getSubmission().getUsername();
-            if (result.getQuestions().isEmpty()) {
-                details.add(List.of(name, "", "", "No", "", "", "", "", result.getGradingError(),
-                        result.getSubmission().getOverallStatus()));
-            }
-            for (QuestionResult q : result.getQuestions()) {
-                boolean manuallyMarked = result.hasManualScore(q.getQuestionId());
-                details.add(List.of(name, q.getQuestionId(), Double.toString(q.getScore()),
-                        manuallyMarked ? "Yes" : "No",
-                        manuallyMarked ? Double.toString(result.getFinalScore(q)) : "",
-                        result.getComment(q.getQuestionId()), Double.toString(result.getFinalScore(q)),
-                        Double.toString(q.getMaxScore()), q.getStatusMessage(),
-                        result.getSubmission().getOverallStatus()));
+                lastName = lastName + parts[i].substring(0, 1).toUpperCase() + parts[i].substring(1).toLowerCase();
             }
         }
-        // Build and validate both outputs before writing either file.
-        Files.writeString(detailsFile, encode(details), StandardCharsets.UTF_8);
-        Files.writeString(scoresFile, encode(output), StandardCharsets.UTF_8);
+
+        return new String[]{firstName.toUpperCase(), lastName.toUpperCase()};
     }
+
+    // prevent csv formatting issues
     private static String encode(List<List<String>> records) {
         StringBuilder text = new StringBuilder();
+
         for (List<String> record : records) {
             for (int i = 0; i < record.size(); i++) {
-                if (i > 0) text.append(',');
-                text.append('"').append(record.get(i).replace("\"", "\"\"")).append('"');
+                if (i > 0) {
+                    text.append(',');
+                }
+                String value = record.get(i);
+                if (value == null) {
+                    value = "";
+                }
+
+                text.append('"');
+                text.append(value.replace("\"", "\"\""));
+                text.append('"');
             }
             text.append("\r\n");
         }
         return text.toString();
     }
-<<<<<<< Updated upstream
-    /** Handles quoted commas, escaped quotes, multiline fields and UTF-8 BOM. */
-=======
 
     // final grade csv: fill the numerator column of the scoresheet template
     private String buildScoresCsv(List<StudentResult> results) throws IOException {
@@ -288,8 +255,7 @@ public class CsvExporter {
             row.set(lastNameColumn, names[1].isBlank() ? "-" : names[1]);
             row.set(firstNameColumn, names[0]);
             row.set(emailColumn, emailUsername + "@computing.smu.edu.sg");
-            row.set(maximumColumn, result.getQuestions().isEmpty()
-                    ? "" : Double.toString(result.getMaximum()));
+            row.set(maximumColumn, "20");
             row.set(endOfLineColumn, "#");
 
             if (result.getQuestions().isEmpty()) {
@@ -321,9 +287,8 @@ public class CsvExporter {
     }
 
     // handle quoted commas, escaped quotes, multiline fields and UTF-8 BOM. */
->>>>>>> Stashed changes
     private static List<List<String>> parse(String text) throws IOException {
-        if (text.startsWith("\uFEFF")) text = text.substring(1);
+        if (text.startsWith("﻿")) text = text.substring(1);
         List<List<String>> records = new ArrayList<>();
         List<String> row = new ArrayList<>();
         StringBuilder field = new StringBuilder();
