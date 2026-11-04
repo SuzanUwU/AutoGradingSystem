@@ -1249,11 +1249,18 @@ public class MainFrame extends JFrame {
                 .replaceFirst("(?i)\\.csv$", "_report.pdf")
         );
 
-        if ((Files.exists(csvTarget) || Files.exists(pdfTarget))
+        Path detailCSVTarget = csvTarget.resolveSibling(
+            csvTarget.getFileName()
+                .toString()
+                .replaceFirst("(?i)\\.csv$", "_detail.csv")
+        );
+
+        if ((Files.exists(csvTarget) || Files.exists(pdfTarget)
+                || Files.exists(detailCSVTarget))
                 && JOptionPane.showConfirmDialog(
                     this,
                     "Replace existing export file(s)?\n"
-                        + csvTarget + "\n" + pdfTarget,
+                        + csvTarget + "\n" + detailCSVTarget + "\n" + pdfTarget,
                     "Replace Export",
                     JOptionPane.YES_NO_OPTION
                 ) != JOptionPane.YES_OPTION) {
@@ -1261,9 +1268,14 @@ public class MainFrame extends JFrame {
         }
 
         try {
+            new CsvExporter().export(
+                csvTarget,
+                studentResults
+            );
+
             // Template-free exporter for any assessment.
             new DetailedCsvExporter().export(
-                csvTarget,
+                detailCSVTarget,
                 studentResults
             );
 
@@ -1274,11 +1286,12 @@ public class MainFrame extends JFrame {
             );
 
             appendLog("Saved CSV: " + csvTarget);
+            appendLog("Saved detail CSV: " + detailCSVTarget);
             appendLog("Saved PDF: " + pdfTarget);
 
             JOptionPane.showMessageDialog(
                 this,
-                "Saved:\n" + csvTarget + "\n" + pdfTarget,
+                "Saved:\n" + csvTarget + "\n" + detailCSVTarget + "\n" + pdfTarget,
                 "Export Complete",
                 JOptionPane.INFORMATION_MESSAGE
             );

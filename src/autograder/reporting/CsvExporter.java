@@ -28,6 +28,22 @@ public class CsvExporter {
     private final int firstNameColumn;
     private final int lastNameColumn;
 
+    /** Creates the scoresheet without requiring a template file. */
+    public CsvExporter() {
+        rows = new ArrayList<>();
+        rows.add(List.of("OrgDefinedId", "Username", "First Name", "Last Name", "Email",
+                "Calculated Final Grade Numerator", "Calculated Final Grade Denominator",
+                "End-of-Line Indicator"));
+        orgDefinedIdColumn = 0;
+        usernameColumn = 1;
+        firstNameColumn = 2;
+        lastNameColumn = 3;
+        emailColumn = 4;
+        scoreColumn = 5;
+        maximumColumn = 6;
+        endOfLineColumn = 7;
+    }
+
     public CsvExporter(Path template) throws IOException {
         rows = parse(Files.readString(template, StandardCharsets.UTF_8));
         if (rows.isEmpty()) throw new IOException("The scoresheet is empty.");
@@ -79,6 +95,7 @@ public class CsvExporter {
             }
         }
         if (maxId < 0) {
+            if (rows.size() == 1) return "#00000001";
             throw new IOException("No existing OrgDefinedId found in scoresheet.");
         }
         return "#" + String.format(Locale.ROOT, "%08d", maxId + 1);
@@ -255,7 +272,8 @@ public class CsvExporter {
             row.set(lastNameColumn, names[1].isBlank() ? "-" : names[1]);
             row.set(firstNameColumn, names[0]);
             row.set(emailColumn, emailUsername + "@computing.smu.edu.sg");
-            row.set(maximumColumn, "20");
+            row.set(maximumColumn, result.getQuestions().isEmpty()
+                    ? "" : Double.toString(result.getMaximum()));
             row.set(endOfLineColumn, "#");
 
             if (result.getQuestions().isEmpty()) {
