@@ -6,28 +6,25 @@ import autograder.validation.ZipExtractor;
 import autograder.validation.TemplateComparator;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.Map;
 import java.util.function.Consumer;
+import java.util.Map;
+
+/** Coordinates the CS102 validation batch. Delegates file operations and reporting. */
 public class AutoGradingService {
-    private static final String ZIP_EXTENSION = ".zip";
     // TODO: read from config/grader.properties once ConfigLoader is implemented.
     private static final String TEMPLATE_FOLDER = "assessment/template";
     private final File workspaceFolder;
     private final TemplateComparator templateComparator;
+    private final SubmissionInspector inspector = new SubmissionInspector();
+    private final SubmissionDetailsBuilder detailsBuilder = new SubmissionDetailsBuilder();
     public AutoGradingService(File workspaceFolder) {
         this.workspaceFolder = workspaceFolder;
         this.templateComparator = new TemplateComparator(new File(TEMPLATE_FOLDER));
     }
+    /** Validates each ZIP and reports progress to the Swing UI. */
     public void processSubmissions(File submissionsFolder, Listener listener) {
-        File[] zipFiles = findZipFiles(submissionsFolder);
+        File[] zipFiles = SubmissionFileUtils.findZipFiles(submissionsFolder);
         if (zipFiles.length == 0) {
             listener.onLog("No ZIP submissions found in: " + submissionsFolder.getAbsolutePath());
             listener.onProgress(0, 0);
@@ -35,7 +32,7 @@ public class AutoGradingService {
         }
 
         try {
-            cleanWorkspace();
+            new WorkspaceCleaner(workspaceFolder).cleanWorkspace();
         } catch (IOException e) {
             listener.onLog("[ERROR] Could not clear old workspace: " + e.getMessage());
             listener.onProgress(0, zipFiles.length);
@@ -56,7 +53,7 @@ public class AutoGradingService {
                 listener.onSubmissionFinished(result);
                 completed++;
             } catch (IOException e) {
-                String username = getUsernameFromFileName(zipFile.getName());
+                String username = SubmissionFileUtils.getUsernameFromFileName(zipFile.getName());
                 listener.onLog("[ERROR] Could not process " + zipFile.getName() + ": " + e.getMessage());
                 listener.onSubmissionFinished(createFailedResult(username, zipFile, e));
                 failed++;
@@ -69,114 +66,19 @@ public class AutoGradingService {
         listener.onLog("Failed: " + failed);
     }
 
-    private void cleanWorkspace() throws IOException {
-        if (!workspaceFolder.exists()) {
-            if (!workspaceFolder.mkdirs()) throw new IOException("Cannot create workspace folder.");
-            return;
-        }
-
-        File[] files = workspaceFolder.listFiles();
-        if (files == null) return;
-
-        for (File file : files) {
-            deleteDirectory(file.toPath());
-        }
-    }
-
-    private void deleteDirectory(Path root) throws IOException {
-        if (!Files.exists(root)) return;
-
-        Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
-            @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                deleteWithRetry(file);
-                return FileVisitResult.CONTINUE;
-            }
-
-            @Override
-            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-                if (exc != null) throw exc;
-                deleteWithRetry(dir);
-                return FileVisitResult.CONTINUE;
-            }
-        });
-    }
-
-    private void deleteWithRetry(Path path) throws IOException {
-        final int maxAttempts = 40;
-        final long waitMillis = 250;
-        IOException lastException = null;
-
-        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-            try {
-                File file = path.toFile();
-                if (file.exists() && !file.canWrite()) file.setWritable(true);
-                Files.deleteIfExists(path);
-                return;
-            } catch (IOException e) {
-                lastException = e;
-                if (attempt < maxAttempts) {
-                    try {
-                        Thread.sleep(waitMillis);
-                    } catch (InterruptedException interrupted) {
-                        Thread.currentThread().interrupt();
-                        throw new IOException("Workspace cleanup interrupted: " + path, interrupted);
-                    }
-                }
-            }
-        }
-
-        throw new IOException("Cannot delete after " + maxAttempts + " attempts: " + path, lastException);
-    }
-
     // for details csv
-    private String getQuestionForFile(File javaFile, File root) {
-        try {
-            String relativePath = root.toPath().relativize(javaFile.toPath()).toString().replace("\\", "/");
-            String[] parts = relativePath.split("/");
-            for (String part : parts) {
-                if (part.equalsIgnoreCase("Q1")) return "Q1";
-                if (part.equalsIgnoreCase("Q2")) return "Q2";
-                if (part.equalsIgnoreCase("Q3")) return "Q3";
-            }
-        } catch (IllegalArgumentException e) {
-            System.out.println("file not inside submission root");
-        }
-        return null;
-    }
+
 
     // record header issues
-    private void recordHeaderIssues(File root, String username, SubmissionValidator validator, SubmissionState state) throws IOException {
-        ArrayList<File> allJavaFiles = new ArrayList<>();
-        collectJavaFiles(root, allJavaFiles);
 
-        for (File javaFile : allJavaFiles) {
-            String[] header = validator.getHeaderValues(javaFile);
-            String fileLabel = javaFile.getName().replace(".java", "");
-            String questionId = getQuestionForFile(javaFile, root);
 
-            if (questionId == null) {
-                continue;
-            }
-
-            if (header[0] == null || header[0].isBlank()) {
-                state.addQuestionIssue(questionId, fileLabel + " Missing Name");
-            }
-
-            if (header[1] == null || header[1].isBlank()) {
-                state.addQuestionIssue(questionId, fileLabel + " Missing Email ID");
-            } else if (!header[1].equalsIgnoreCase(username)) {
-                state.addQuestionIssue(questionId, fileLabel + " Email ID Mismatch");
-            }
-        }
-    }
-
+    /** Runs extraction, correction, reinspection and result construction for one ZIP. */
     private SubmissionResult processSubmission(File zipFile, SubmissionState state, Consumer<String> logger) throws IOException {
         ZipExtractor zipExtractor = new ZipExtractor();
         SubmissionValidator validator = new SubmissionValidator(logger);
         SubmissionCorrector corrector = new SubmissionCorrector(logger, state::addSubmissionIssue);
         String fileName = zipFile.getName();
-        String submissionName = removeZipExtension(fileName);
+        String submissionName = SubmissionFileUtils.removeZipExtension(fileName);
         String expectedUsername = validator.validateAndGetUsername(zipFile);
         File destination = new File(workspaceFolder, submissionName);
         logger.accept("Processing: " + fileName);
@@ -189,7 +91,7 @@ public class AutoGradingService {
         logger.accept("\nChecking submission...");
         state.stage = Stage.VALIDATION;
         Map<String, File> questionFolders = validator.findQuestionFolders(correctedRoot);
-        displayQuestionFolders(questionFolders, validator, expectedUsername, logger, state);
+        inspector.displayQuestionFolders(questionFolders, validator, expectedUsername, logger, state);
 
         // Must run before correctHeaders(), which edits the students' files.
         boolean templateSubmission = templateComparator.isUnmodifiedTemplate(correctedRoot);
@@ -203,115 +105,24 @@ public class AutoGradingService {
         logger.accept("\nCorrecting Java headers...");
 
         // for details csv ; check file headers
-        recordHeaderIssues(correctedRoot, expectedUsername, validator, state);
+        inspector.recordHeaderIssues(correctedRoot, expectedUsername, validator, state);
 
         state.stage = Stage.HEADERS;
         corrector.correctHeaders(correctedRoot, expectedUsername);
         state.stage = Stage.NONE;
-        FinalInspection inspection = inspectFinalSubmission(correctedRoot, expectedUsername, validator);
-        recordOpenIssues(correctedRoot, expectedUsername, validator, inspection, state);
+        FinalInspection inspection = inspector.inspectFinalSubmission(correctedRoot, expectedUsername, validator);
+        inspector.recordOpenIssues(correctedRoot, expectedUsername, validator, inspection, state);
         String structureStatus = inspection.structureIssue ? "Review" : state.structureCorrected ? "Corrected" : "Valid";
         String headerStatus = inspection.headerIssue ? "Review" : state.headerCorrected ? "Corrected" : "Valid";
-        String overallStatus = templateSubmission ? "Review" : getOverallStatus(structureStatus, headerStatus);
-        String details = buildDetails(zipFile, expectedUsername, correctedRoot, structureStatus, headerStatus,
+        String overallStatus = templateSubmission ? "Review" : SubmissionFileUtils.getOverallStatus(structureStatus, headerStatus);
+        String details = detailsBuilder.buildDetails(zipFile, expectedUsername, correctedRoot, structureStatus, headerStatus,
                 overallStatus, inspection, state, validator);
 
         return new SubmissionResult(expectedUsername, structureStatus, headerStatus, overallStatus, details,
                 state.submissionIssues, state.q1Issues, state.q2Issues, state.q3Issues,
                 state.folderFixes, state.nameFixes, state.emailFixes, state.openIssues, state.anomalies);
     }
-    private FinalInspection inspectFinalSubmission(File root, String username, SubmissionValidator validator) throws IOException {
-        FinalInspection inspection = new FinalInspection();
-        inspection.structureIssue = !root.isDirectory() || !root.getName().equalsIgnoreCase(username);
-        inspection.questionFolders = validator.findQuestionFolders(root);
-        for (Map.Entry<String, File> entry : inspection.questionFolders.entrySet()) {
-            File questionFolder = entry.getValue();
-            if (questionFolder == null) {
-                inspection.structureIssue = true;
-                continue;
-            }
-            for (String fileName : getRequiredFiles(entry.getKey())) {
-                if (!new File(questionFolder, fileName).isFile()) inspection.structureIssue = true;
-            }
-        }
-        collectJavaFiles(root, inspection.javaFiles);
-        inspection.javaFiles.sort(Comparator.comparing(File::getPath));
-        for (File javaFile : inspection.javaFiles) {
-            if (!validator.hasValidHeader(javaFile, username)) inspection.headerIssue = true;
-        }
-        return inspection;
-    }
-    private void recordOpenIssues(File root, String username, SubmissionValidator validator, FinalInspection inspection, SubmissionState state) throws IOException {
-        if (root == null || !root.isDirectory() || !root.getName().equalsIgnoreCase(username)) {
-            state.addOpenIssue("Username folder/path still needs review");
-        }
 
-        for (Map.Entry<String, File> entry : inspection.questionFolders.entrySet()) {
-            File questionFolder = entry.getValue();
-            if (questionFolder == null) {
-                state.addOpenIssue(entry.getKey() + " folder missing");
-                continue;
-            }
-            for (String fileName : getRequiredFiles(entry.getKey())) {
-                if (!new File(questionFolder, fileName).isFile()) {
-                    state.addOpenIssue(entry.getKey() + "/" + fileName + " missing");
-                }
-            }
-        }
-
-        if (inspection.javaFiles.isEmpty()) state.addOpenIssue("No Java files found");
-        for (File javaFile : inspection.javaFiles) {
-            String path = root.toPath().relativize(javaFile.toPath()).toString().replace("\\", "/");
-            String[] header = validator.getHeaderValues(javaFile);
-            if (header[0] == null || header[0].isBlank()) state.addOpenIssue(path + " Name missing");
-            if (header[1] == null || header[1].isBlank()) state.addOpenIssue(path + " Email ID missing");
-            else if (!header[1].equalsIgnoreCase(username)) state.addOpenIssue(path + " Email ID mismatch");
-        }
-    }
-
-    private String buildDetails(File zipFile, String username, File root, String structureStatus, String headerStatus,
-            String overallStatus, FinalInspection inspection, SubmissionState state, SubmissionValidator validator) throws IOException {
-        StringBuilder details = new StringBuilder();
-        details.append("STUDENT\nUsername: ").append(username)
-                .append("\nOverall status: ").append(overallStatus).append("\n");
-        details.append("\nSUBMISSION\n[OK] ZIP filename identifies: ").append(username)
-                .append("\nZIP file: ").append(zipFile.getName())
-                .append("\nUsername folder: ").append(structureStatus)
-                .append("\nWorkspace path: ").append(root.getPath()).append("\n");
-        details.append("\nQUESTION FOLDERS\n");
-        for (Map.Entry<String, File> entry : inspection.questionFolders.entrySet()) {
-            details.append(entry.getValue() == null ? "[MISSING] " : "[OK] ")
-                    .append(entry.getKey()).append("\n");
-        }
-        details.append("\nREQUIRED JAVA FILES\n");
-        for (Map.Entry<String, File> entry : inspection.questionFolders.entrySet()) {
-            if (entry.getValue() == null) continue;
-            for (String fileName : getRequiredFiles(entry.getKey())) {
-                File javaFile = new File(entry.getValue(), fileName);
-                details.append(javaFile.isFile() ? "[OK] " : "[MISSING] ")
-                        .append(entry.getKey()).append("/").append(fileName).append("\n");
-            }
-        }
-        details.append("\nJAVA HEADERS - FINAL STATE\n");
-        if (inspection.javaFiles.isEmpty()) {
-            details.append("[MISSING] No Java files found\n");
-        } else {
-            for (File javaFile : inspection.javaFiles) {
-                String path = root.toPath().relativize(javaFile.toPath()).toString();
-                String[] header = validator.getHeaderValues(javaFile);
-                boolean valid = validator.hasValidHeader(javaFile, username);
-                details.append(valid ? "[OK] " : "[REVIEW] ").append(path).append("\n")
-                        .append("    Name: ").append(valueOrMissing(header[0])).append("\n")
-                        .append("    Email ID: ").append(valueOrMissing(header[1])).append("\n");
-            }
-        }
-        details.append("\nSUMMARY\nStructure: ").append(structureStatus)
-                .append("\nHeaders: ").append(headerStatus).append("\n")
-                .append("\nCHANGES / WARNINGS\n");
-        if (state.notableMessages.isEmpty()) details.append("None\n");
-        else for (String message : state.notableMessages) details.append(message).append("\n");
-        return details.toString();
-    }
     private SubmissionResult createFailedResult(String username, File zipFile, IOException e) {
         String details = "STUDENT\nUsername: " + username
                 + "\nOverall status: Failed"
@@ -323,183 +134,7 @@ public class AutoGradingService {
                 new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(),
                 new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), openIssues, new ArrayList<String>());
     }
-    private void displayQuestionFolders(Map<String, File> folders, SubmissionValidator validator,
-            String username, Consumer<String> logger, SubmissionState state) throws IOException {
-        for (Map.Entry<String, File> entry : folders.entrySet()) {
-            String question = entry.getKey();
-            File folder = entry.getValue();
-            if (folder == null) {
-                logger.accept("[MISSING] " + question + " folder not found.");
-                // record missing files for details csv
-                for (String fileName : getRequiredFiles(question)) {
-                    String questionPart = fileName.replace(".java", "");
-                    state.addQuestionIssue(questionPart, questionPart + " Missing File");
-                }
 
-                continue;
-            }
-            logger.accept("[OK] " + question + " found: " + folder.getPath());
-            for (String fileName : getRequiredFiles(question)) {
-                File javaFile = new File(folder, fileName);
-                if (validator.hasFile(folder, fileName)) {
-                    logger.accept("    [OK] " + fileName);
-                    validator.validateHeader(javaFile, username);                    
-
-                } else {
-                    logger.accept("    [MISSING] " + fileName);
-                    // to record issue for detail csv
-                    String questionPart = fileName.replace(".java", "");
-                    state.addQuestionIssue(questionPart, questionPart + " Missing File");
-                }
-            }
-        }
-    }
-    private String[] getRequiredFiles(String question) {
-        if (question.equals("Q1")) return new String[] {"Q1a.java", "Q1b.java"};
-        if (question.equals("Q2")) return new String[] {"Q2a.java", "Q2b.java"};
-        if (question.equals("Q3")) return new String[] {"Q3.java"};
-        return new String[0];
-    }
-    private String getOverallStatus(String structureStatus, String headerStatus) {
-        if (structureStatus.equals("Review") || headerStatus.equals("Review")) return "Review";
-        if (structureStatus.equals("Corrected") || headerStatus.equals("Corrected")) return "Corrected";
-        return "Valid";
-    }
-    private String valueOrMissing(String value) {
-        return value == null || value.isEmpty() ? "MISSING" : value;
-    }
-    private void collectJavaFiles(File folder, ArrayList<File> javaFiles) {
-        if (folder == null || !folder.isDirectory()) return;
-        File[] files = folder.listFiles();
-        if (files == null) return;
-        for (File file : files) {
-            if (file.isDirectory()) collectJavaFiles(file, javaFiles);
-            else if (file.getName().toLowerCase().endsWith(".java")) javaFiles.add(file);
-        }
-    }
-    private File[] findZipFiles(File folder) {
-        if (folder == null || !folder.isDirectory()) return new File[0];
-        File[] files = folder.listFiles(this::isZipFile);
-        if (files == null) return new File[0];
-        Arrays.sort(files, Comparator.comparing(File::getName));
-        return files;
-    }
-    private boolean isZipFile(File file) {
-        return file.isFile() && file.getName().toLowerCase().endsWith(ZIP_EXTENSION);
-    }
-    private String removeZipExtension(String fileName) {
-        return fileName.substring(0, fileName.length() - ZIP_EXTENSION.length());
-    }
-    private String getUsernameFromFileName(String fileName) {
-        String name = fileName.toLowerCase().endsWith(ZIP_EXTENSION) ? removeZipExtension(fileName) : fileName;
-        return name.replaceFirst("^\\d{4}-\\d{4}-", "");
-    }
-    private enum Stage { NONE, STRUCTURE, VALIDATION, HEADERS }
-    private static class SubmissionState {
-        private Stage stage = Stage.NONE;
-        private boolean structureCorrected;
-        private boolean headerCorrected;
-        private final ArrayList<String> notableMessages = new ArrayList<>();
-
-        // store issues for details csv
-        private final ArrayList<String> submissionIssues = new ArrayList<>();
-        private final ArrayList<String> q1Issues = new ArrayList<>();
-        private final ArrayList<String> q2Issues = new ArrayList<>();
-        private final ArrayList<String> q3Issues = new ArrayList<>();
-        private final ArrayList<String> folderFixes = new ArrayList<>();
-        private final ArrayList<String> nameFixes = new ArrayList<>();
-        private final ArrayList<String> emailFixes = new ArrayList<>();
-        private final ArrayList<String> openIssues = new ArrayList<>();
-        private final ArrayList<String> anomalies = new ArrayList<>();
-
-        private void addSubmissionIssue(String issue) {
-            if (!submissionIssues.contains(issue)) {
-                submissionIssues.add(issue);
-            }
-        }
-
-        private void addQuestionIssue(String questionId, String issue) {
-            ArrayList<String> target;
-            if (questionId.startsWith("Q1")) {
-                target = q1Issues;
-            } else if (questionId.startsWith("Q2")) {
-                target = q2Issues;
-            } else if (questionId.startsWith("Q3")) {
-                target = q3Issues;
-            } else {
-                return;
-            }
-
-            if (!target.contains(issue)) {
-                target.add(issue);
-            }
-        }
-
-        private void addOpenIssue(String issue) {
-            if (!openIssues.contains(issue)) openIssues.add(issue);
-        }
-
-        private void addAnomaly(String anomaly) {
-            if (!anomalies.contains(anomaly)) anomalies.add(anomaly);
-        }
-
-        private void addFix(ArrayList<String> target, String detail) {
-            if (!target.contains(detail)) target.add(detail);
-        }
-
-        private String stripCorrectedPrefix(String text) {
-            return text.replaceFirst("^\\[CORRECTED\\]\\s*", "").trim();
-        }
-
-        private String compactFolderFix(String detail) {
-            if (detail.startsWith("Renamed top-level folder from ")) {
-                String rest = detail.substring("Renamed top-level folder from ".length());
-                return rest.replace(" to ", " -> ");
-            }
-            if (detail.startsWith("Added missing username folder: ")) {
-                return "Added username folder: " + detail.substring("Added missing username folder: ".length());
-            }
-            return detail;
-        }
-
-        private String compactHeaderFix(String detail, String label) {
-            if (detail.startsWith("Added " + label + " to ")) {
-                return detail.substring(("Added " + label + " to ").length()) + " (added)";
-            }
-            if (label.equals("Email ID") && detail.startsWith("Email ID in ")) {
-                String rest = detail.substring("Email ID in ".length());
-                int colon = rest.lastIndexOf(':');
-                String path = colon >= 0 ? rest.substring(0, colon).trim() : rest;
-                return path + " (full email changed to short ID)";
-            }
-            return detail;
-        }
-
-        private void track(String message) {
-            String text = message.trim();
-            if (text.startsWith("[CORRECTED]")) {
-                String detail = stripCorrectedPrefix(text);
-                if (stage == Stage.STRUCTURE) {
-                    structureCorrected = true;
-                    addFix(folderFixes, compactFolderFix(detail));
-                }
-                if (stage == Stage.HEADERS) {
-                    headerCorrected = true;
-                    if (detail.contains("Name")) addFix(nameFixes, compactHeaderFix(detail, "Name"));
-                    if (detail.contains("Email ID")) addFix(emailFixes, compactHeaderFix(detail, "Email ID"));
-                }
-                notableMessages.add(text);
-            } else if (text.startsWith("[WARNING]") || text.startsWith("[MISSING]") || text.startsWith("[ERROR]")) {
-                notableMessages.add(text);
-            }
-        }
-    }
-    private static class FinalInspection {
-        private boolean structureIssue;
-        private boolean headerIssue;
-        private Map<String, File> questionFolders;
-        private final ArrayList<File> javaFiles = new ArrayList<>();
-    }
     public interface Listener {
         void onLog(String message);
         void onSubmissionFinished(SubmissionResult result);
