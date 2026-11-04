@@ -507,6 +507,7 @@ public class MainFrame extends JFrame {
             JOptionPane.showMessageDialog(this, "Choose a different filename to preserve the original scoresheet.");
             return;
         }
+<<<<<<< Updated upstream
         if ((Files.exists(target) || Files.exists(details)) && JOptionPane.showConfirmDialog(this,
                 "Replace existing export file(s)?\n" + target + "\n" + details,
                 "Replace Export", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
@@ -515,6 +516,72 @@ public class MainFrame extends JFrame {
             appendLog("Saved scores: " + target + "\nSaved marks and comments: " + details);
             JOptionPane.showMessageDialog(this, "Saved:\n" + target + "\n" + details,
                     "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+=======
+
+        Path csvTarget = chooser.getSelectedFile()
+                .toPath()
+                .toAbsolutePath();
+
+        if (!csvTarget.toString()
+                .toLowerCase(Locale.ROOT)
+                .endsWith(".csv")) {
+
+            csvTarget = Path.of(csvTarget + ".csv");
+        }
+
+        Path pdfTarget = csvTarget.resolveSibling(
+            csvTarget.getFileName()
+                .toString()
+                .replaceFirst("(?i)\\.csv$", "_report.pdf")
+        );
+
+        Path detailCSVTarget = csvTarget.resolveSibling(
+            csvTarget.getFileName()
+                .toString()
+                .replaceFirst("(?i)\\.csv$", "_detail.csv")
+        );
+
+        if ((Files.exists(csvTarget) || Files.exists(pdfTarget)
+                || Files.exists(detailCSVTarget))
+                && JOptionPane.showConfirmDialog(
+                    this,
+                    "Replace existing export file(s)?\n"
+                        + csvTarget + "\n" + detailCSVTarget + "\n" + pdfTarget,
+                    "Replace Export",
+                    JOptionPane.YES_NO_OPTION
+                ) != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        try {
+            // Template-free exporter for any assessment.
+            new DetailedCsvExporter().export(
+                detailCSVTarget,
+                studentResults
+            );
+
+            new CsvExporter().export(
+                csvTarget, 
+                studentResults);
+
+            // Reuse existing PDF reporting.
+            new PdfReportExporter().export(
+                pdfTarget,
+                studentResults
+            );
+
+            appendLog("Saved CSV: " + csvTarget);
+            appendLog("Saved detail CSV: " + detailCSVTarget);
+            appendLog("Saved PDF: " + pdfTarget);
+
+            JOptionPane.showMessageDialog(
+                this,
+                "Saved:\n" + csvTarget + "\n" + detailCSVTarget + "\n" + pdfTarget,
+                "Export Complete",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+
+>>>>>>> Stashed changes
         } catch (IOException ex) {
             appendLog("[ERROR] CSV export: " + ex.getMessage());
             JOptionPane.showMessageDialog(this, "Could not save both CSV files.\n" + ex.getMessage(),

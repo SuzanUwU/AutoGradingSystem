@@ -22,6 +22,22 @@ public class CsvExporter {
     private final int firstNameColumn;
     private final int lastNameColumn;
 
+    /** Creates a scoresheet directly from the grading results, without a template. */
+    public CsvExporter() {
+        rows = new ArrayList<>();
+        rows.add(List.of("OrgDefinedId", "Username", "First Name", "Last Name", "Email",
+                "Calculated Final Grade Numerator", "Calculated Final Grade Denominator",
+                "End-of-Line Indicator"));
+        orgDefinedIdColumn = 0;
+        usernameColumn = 1;
+        firstNameColumn = 2;
+        lastNameColumn = 3;
+        emailColumn = 4;
+        scoreColumn = 5;
+        maximumColumn = 6;
+        endOfLineColumn = 7;
+    }
+
     public CsvExporter(Path template) throws IOException {
         rows = parse(Files.readString(template, StandardCharsets.UTF_8));
         if (rows.isEmpty()) throw new IOException("The scoresheet is empty.");
@@ -64,6 +80,7 @@ public class CsvExporter {
         List<List<String>> output = new ArrayList<>();
         output.add(new ArrayList<>(rows.get(0)));
         for (int i = 1; i < rows.size(); i++) {
+<<<<<<< Updated upstream
             List<String> row = new ArrayList<>(rows.get(i));
             StudentResult result = byUsername.get(username(row.get(usernameColumn)));
             if (result != null) {
@@ -74,6 +91,79 @@ public class CsvExporter {
                     catch (NumberFormatException ex) { throw new IOException("Invalid denominator for " + row.get(usernameColumn)); }
                     if (maximum != result.getMaximum()) throw new IOException("Scoresheet denominator differs from grading maximum for " + row.get(usernameColumn));
                     row.set(scoreColumn, Double.toString(result.getTotal()));
+=======
+            String value = rows.get(i).get(orgDefinedIdColumn).trim().replaceFirst("^#", "");
+            try {
+                maxId = Math.max(maxId, Long.parseLong(value));
+            } catch (NumberFormatException e) {
+                throw new IOException("Invalid OrgDefinedId in scoresheet row " + (i + 1));
+            }
+        }
+        if (maxId < 0) {
+            if (rows.size() == 1) return "#00000001";
+            throw new IOException("No existing OrgDefinedId found in scoresheet.");
+        }
+        return "#" + String.format(Locale.ROOT, "%08d", maxId + 1);
+    }
+
+    // username
+    private String formatUsername(String username) {
+        if (username == null) {
+            return "";
+        }
+        username = username.trim();
+        while (username.startsWith("#")) {
+            username = username.substring(1);
+        }
+
+        return "#" + username;
+    }
+
+    // split existing fullname in template to 2 parts
+    private String[] splitFullName(String fullName) {
+        if (fullName == null || fullName.isBlank()) {
+            return new String[] {"", ""};
+        }
+        String [] parts = fullName.trim().split("\\s+", 2);
+        String firstName = parts[0].toUpperCase();
+        String lastName = "-";
+        if (parts.length > 1) {
+            lastName = parts[1].toUpperCase();
+        }
+
+        return new String[] {firstName, lastName};
+    }
+
+
+    // split username to first and last name
+    private String[] fullname(String username) {
+        if (username == null || username.trim().isEmpty()) {
+            return new String[]{"", ""};
+        }
+        
+        username = username.trim();
+
+        while (username.startsWith("#")) {
+            username = username.substring(1);
+        }
+
+        // remove year
+        String[] parts = username.split("\\.");
+        if (parts.length > 0 && parts[parts.length-1].matches("\\d{4}")) {
+            parts = Arrays.copyOf(parts, parts.length - 1);
+        }
+
+        String firstName = "";
+        String lastName = "";
+        if (parts.length > 0) {
+            firstName = parts[0];
+            firstName = firstName.substring(0, 1).toUpperCase() + firstName.substring(1).toLowerCase();
+        }
+        for (int i = 1; i < parts.length; i++) {
+            if (!parts[i].isEmpty()) {
+                if (!lastName.isEmpty()) {
+                    lastName = lastName + " ";
+>>>>>>> Stashed changes
                 }
             }
             output.add(row);
@@ -111,7 +201,127 @@ public class CsvExporter {
         }
         return text.toString();
     }
+<<<<<<< Updated upstream
     /** Handles quoted commas, escaped quotes, multiline fields and UTF-8 BOM. */
+=======
+
+    // final grade csv: fill the numerator column of the scoresheet template
+    private String buildScoresCsv(List<StudentResult> results) throws IOException {
+        Map<String, StudentResult> byUsername = new LinkedHashMap<>();
+
+        for (StudentResult result : results) {
+            String name = username(result.getSubmission().getUsername());
+
+            if (byUsername.put(name, result) != null) {
+                throw new IOException("Duplicate submission username: " + name);
+            }
+        }
+
+        List<List<String>> output = new ArrayList<>();
+        output.add(new ArrayList<>(rows.get(0)));
+
+        Set<String> matched = new HashSet<>();
+
+        // keep existing template rows and update their scores
+        for (int i = 1; i < rows.size(); i++) {
+            List<String> row = new ArrayList<>(rows.get(i));
+            String name = username(row.get(usernameColumn));
+
+            StudentResult result = byUsername.get(name);
+
+            if (result != null) {
+                matched.add(name);
+                if (result.getQuestions().isEmpty()) {
+                    row.set(scoreColumn, "");
+                } else {
+                    double maximum;
+
+                    try {
+                        maximum = Double.parseDouble(row.get(maximumColumn));
+                    } catch (NumberFormatException ex) {
+                        throw new IOException("Invalid denominator for " + row.get(usernameColumn)
+                        );
+                    }
+
+                    if (maximum != result.getMaximum()) {
+                        throw new IOException("Scoresheet denominator differs from grading maximum for " + row.get(usernameColumn));
+                    }
+                    row.set(scoreColumn, Double.toString(result.getTotal()));
+
+                    // Split the existing full name if the last-name column is blank.
+                    String existingLast = row.get(lastNameColumn).trim();
+                    String existingFirst = row.get(firstNameColumn).trim();
+                    boolean hasNoLastName = existingLast.isBlank() || existingLast.equals("_");
+                    boolean hasFirstName = !existingFirst.isBlank() && !existingFirst.equals("_");
+
+                    if (hasNoLastName && hasFirstName) {
+                        String[] names = splitFullName(existingFirst);
+                        row.set(firstNameColumn, names[0]);
+                        row.set(lastNameColumn, names[1]);
+                    }
+                }
+            }
+            output.add(row);
+        }
+
+        // add students who are not already in the template
+        String nextId = nextOrgDefinedId();
+        for (Map.Entry<String, StudentResult> entry : byUsername.entrySet()) {
+            String name = entry.getKey();
+            StudentResult result = entry.getValue();
+
+            if (matched.contains(name)) {
+                continue;
+            }
+
+            List<String> row = new ArrayList<>(java.util.Collections.nCopies(rows.get(0).size(), ""));
+
+            String[] names = fullname(name);
+
+            row.set(orgDefinedIdColumn, nextId);
+            long idNumber = Long.parseLong(nextId.substring(1));
+            nextId = "#" + String.format(Locale.ROOT, "%08d", idNumber + 1);
+
+            String emailUsername = name.trim().replaceFirst("^#", "");
+
+            row.set(usernameColumn, formatUsername(name));
+            row.set(lastNameColumn, names[1].isBlank() ? "-" : names[1]);
+            row.set(firstNameColumn, names[0]);
+            row.set(emailColumn, emailUsername + "@computing.smu.edu.sg");
+            row.set(maximumColumn, result.getQuestions().isEmpty()
+                    ? "" : Double.toString(result.getMaximum()));
+            row.set(endOfLineColumn, "#");
+
+            if (result.getQuestions().isEmpty()) {
+                row.set(scoreColumn, "");
+            } else {
+                row.set(scoreColumn, Double.toString(result.getTotal()));
+            }
+            output.add(row);
+        }
+        return encode(output);
+    }
+
+    public void export(Path scoresFile, List<StudentResult> results) throws IOException {
+        if (scoresFile == null) {
+            throw new IOException("The output file paths cannot be empty.");
+        }
+
+        if (results == null) {
+            throw new IOException("Student results cannot be null");
+        }
+
+        String scoresCsv = buildScoresCsv(results);
+
+        if (scoresFile.toAbsolutePath().getParent() != null) {
+            Files.createDirectories(scoresFile.toAbsolutePath().getParent());
+        }
+
+        Files.writeString(scoresFile, scoresCsv, StandardCharsets.UTF_8);
+    }
+
+    // handle quoted commas, escaped quotes, multiline fields and UTF-8 BOM. */
+>>>>>>> Stashed changes
     private static List<List<String>> parse(String text) throws IOException {
         if (text.startsWith("\uFEFF")) text = text.substring(1);
         List<List<String>> records = new ArrayList<>();
