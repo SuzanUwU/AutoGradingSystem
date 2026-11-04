@@ -942,17 +942,32 @@ public class MainFrame extends JFrame {
     private void saveEdgeCaseResultsCsv(List<EdgeCaseRunner.Result> results) {
         Path output = Path.of("workspace", "edge_case_results.csv");
         ArrayList<String> lines = new ArrayList<>();
-        lines.add("Student,Q1a,Q1b,Q2a,Q2b,Q3,Passed,Failed,Status");
+
+        lines.add("Student,Validation Status,Grading Status,Q1a (/7.0),Q1b (/9.0),Q2a (/7.0),Q2b (/6.0),Q3 (/16.0),Total,Maximum,Status");
 
         for (EdgeCaseRunner.Result result : results) {
+            StudentResult student = null;
+
+            for (StudentResult s : studentResults) {
+                if (s.getSubmission().getUsername().equals(result.getUsername())) {
+                    student = s;
+                    break;
+                }
+            }
+
+            String validationStatus = student == null ? "" : student.getSubmission().getOverallStatus();
+            String gradingStatus = student == null ? "" : student.getGradingStatus();
+
             lines.add(csvValue(result.getUsername()) + ","
+                    + csvValue(validationStatus) + ","
+                    + csvValue(gradingStatus) + ","
                     + edgeScore(result, "Q1a") + ","
                     + edgeScore(result, "Q1b") + ","
                     + edgeScore(result, "Q2a") + ","
                     + edgeScore(result, "Q2b") + ","
                     + edgeScore(result, "Q3") + ","
-                    + result.getPassed() + ","
-                    + result.getFailed() + ","
+                    + (result.isSkipped() ? "" : result.getPassed()) + ","
+                    + (result.isSkipped() ? "" : result.getTotal()) + ","
                     + csvValue(result.isSkipped() ? result.getError() : "Completed"));
         }
 
@@ -966,7 +981,7 @@ public class MainFrame extends JFrame {
 
     private String edgeScore(EdgeCaseRunner.Result result, String qid) {
         EdgeCaseRunner.QuestionResult q = result.get(qid);
-        return q == null ? "" : csvValue(q.getScoreText());
+        return q == null ? "" : Integer.toString(q.getPassed());
     }
 
     private void generateTesters() {
