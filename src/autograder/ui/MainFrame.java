@@ -26,7 +26,32 @@ import autograder.model.*;
 import autograder.testgen.TesterGenerator;
 import autograder.EdgeCaseRunner;
 
+import autograder.reporting.DetailedCsvExporter;
+import autograder.python.PythonGradingService;
+import java.util.zip.ZipFile;
+import java.util.zip.ZipEntry;
+import java.util.Enumeration;
+import java.io.InputStream;
+import java.nio.file.StandardCopyOption;
+import java.util.Comparator;
+import autograder.python.PythonValidationService; // for python grader 
+
 public class MainFrame extends JFrame {
+    // for Python grader 
+    private final JComboBox<String> assessmentMode =
+            new JComboBox<>(new String[] {
+                "CS102 - Java",
+                "IS1704 - Python"
+            });
+
+    private final JLabel titleLabel =
+            new JLabel("CS102 Auto Grading System");
+
+    private boolean isPythonMode() {
+        return assessmentMode.getSelectedIndex() == 1;
+    }
+    // =================
+
     private final JTextField submissionsField = new JTextField(Path.of(System.getProperty("user.dir"), "submissions").toAbsolutePath().normalize().toString(), 35);
     private final JTextField searchField = new JTextField(22);
     private final JComboBox<String> statusFilter = new JComboBox<>(
@@ -39,6 +64,7 @@ public class MainFrame extends JFrame {
     private final JButton edgeCaseButton = new JButton("Run Edge Cases (Bonus)");
     private final JButton exportButton = new JButton("Export Results");
     private final JButton manualButton = new JButton("Manual Score (Optional)");
+    private final JButton lab7Button = new JButton("Lab 7");
     private boolean busy;
     private boolean generatedTestersReadyForCurrentRun;
     private final ArrayList<StudentResult> studentResults = new ArrayList<>();
@@ -101,11 +127,19 @@ public class MainFrame extends JFrame {
     }
     private void buildInterface() {
         setLayout(new BorderLayout(10, 10));
-        JLabel titleLabel = new JLabel("CS102 Auto Grading System");
+        // JLabel titleLabel = new JLabel("CS102 Auto Grading System");
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 22f));
         JPanel headerPanel = new JPanel(new BorderLayout());
         headerPanel.setBorder(BorderFactory.createEmptyBorder(12, 15, 0, 15));
         headerPanel.add(titleLabel, BorderLayout.WEST);
+        // for Python grader
+        JPanel modePanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+
+        modePanel.add(new JLabel("Assessment Mode:"));
+        modePanel.add(assessmentMode);
+
+        headerPanel.add(modePanel, BorderLayout.EAST);
+        // ========================
         add(headerPanel, BorderLayout.NORTH);
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(0, 15, 0, 15));
@@ -178,6 +212,7 @@ public class MainFrame extends JFrame {
         otherActions.add(edgeCaseButton);
         otherActions.add(exportButton);
         otherActions.add(manualButton);
+        otherActions.add(lab7Button); // Lab 7 homework checker (separate workflow)
 
         gbc.gridy = 3;
         setupPanel.add(otherActions, gbc);
@@ -188,6 +223,8 @@ public class MainFrame extends JFrame {
         gradeGeneratedButton.setEnabled(false);
         edgeCaseButton.setEnabled(false);
         exportButton.setEnabled(false);
+        lab7Button.setVisible(false); // Hidden in CS102 Java mode
+        lab7Button.setEnabled(false);
 
         container.add(setupPanel, BorderLayout.NORTH);
         container.add(createSummaryPanel(), BorderLayout.SOUTH);
@@ -208,36 +245,9 @@ public class MainFrame extends JFrame {
         failedLabel.setForeground(new Color(185, 28, 28));
         return panel;
     }
+    /** Shared status colors for both result tables. */
     private DefaultTableCellRenderer createStatusRenderer() {
-        return new DefaultTableCellRenderer() {
-            @Override
-            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
-                JLabel label = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-                String status = value == null ? "" : value.toString();
-                label.setHorizontalAlignment(JLabel.CENTER);
-                label.setFont(table.getFont().deriveFont(Font.BOLD));
-                label.setForeground(Color.BLACK);
-                label.setBackground(Color.WHITE);
-
-                if (status.equals("Valid")) {
-                    label.setBackground(new Color(220, 245, 224));
-                    label.setForeground(new Color(28, 94, 45));
-                } else if (status.equals("Corrected")) {
-                    label.setBackground(new Color(219, 234, 254));
-                    label.setForeground(new Color(30, 64, 175));
-                } else if (status.equals("Review")) {
-                    label.setBackground(new Color(254, 243, 199));
-                    label.setForeground(new Color(146, 64, 14));
-                } else if (status.equals("Failed")) {
-                    label.setBackground(new Color(254, 226, 226));
-                    label.setForeground(new Color(153, 27, 27));
-                }
-
-                if (isSelected) label.setBorder(BorderFactory.createLineBorder(table.getSelectionBackground(), 2));
-                else label.setBorder(BorderFactory.createEmptyBorder(1, 4, 1, 4));
-                return label;
-            }
-        };
+        return new StatusCellRenderer();
     }
 
     private void applyStatusColors() {
@@ -384,7 +394,70 @@ public class MainFrame extends JFrame {
         panel.add(new JScrollPane(logArea), BorderLayout.CENTER);
         return panel;
     }
+    // for Python grader
+    private void switchAssessmentMode() {
+        if (busy) {
+            return;
+        }
+
+        boolean python = isPythonMode();
+
+        setTitle(python
+                ? "IS1704 Auto Grading System - Python"
+                : "CS102 Auto Grading System - Java");
+
+        titleLabel.setText(python
+                ? "IS1704 Auto Grading System"
+                : "CS102 Auto Grading System");
+
+        // Clear results from the previous assessment.
+        studentResults.clear();
+        generatedTotals.clear();
+
+        tableModel.setRowCount(0);
+        correctionTableModel.setRowCount(0);
+
+        resultTable.clearSelection();
+        correctionTable.clearSelection();
+
+        detailsArea.setText("");
+        correctionDetailArea.setText("");
+        logArea.setText("");
+
+        generatedTestersReadyForCurrentRun = false;
+
+        progressBar.setValue(0);
+        progressBar.setString("Ready");
+
+        updateSummary();
+
+        // PF1-specific functionality will be added next.
+        // Disable actions that currently use Java-only logic.
+        if (python) {
+            gradeOriginalButton.setText("Start Python Grading");
+            generateTestersButton.setEnabled(false);
+            gradeGeneratedButton.setEnabled(false);
+            edgeCaseButton.setEnabled(false);
+
+            logArea.append(
+                    "IS1704 Python mode selected.\n"
+                    + "Validate submissions, then start Python grading.\n"
+            );
+        } else {
+            gradeOriginalButton.setText(
+                    "Start Grading (Original Testers)"
+            );
+
+            logArea.append(
+                    "CS102 Java mode selected.\n"
+            );
+        }
+
+        setControlsEnabled(true);
+    }
+    // ==========================
     private void connectActions() {
+        assessmentMode.addActionListener(e -> switchAssessmentMode()); // for Python mode
         browseButton.addActionListener(e -> chooseSubmissionsFolder());
         validateButton.addActionListener(e -> validateSubmissions());
         clearLogButton.addActionListener(e -> logArea.setText(""));
@@ -400,12 +473,25 @@ public class MainFrame extends JFrame {
         correctionTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) showSelectedCorrection();
         });
-        gradeOriginalButton.addActionListener(e -> startGrading(new File("assessment/testers"), "Original testers", false));
+        // gradeOriginalButton.addActionListener(e -> startGrading(new File("assessment/testers"), "Original testers", false));
+        gradeOriginalButton.addActionListener(e -> {
+            if (isPythonMode()) {
+                startPythonGrading();
+            } else {
+                startGrading(
+                    new File("assessment/testers"),
+                    "Original testers",
+                    false
+                );
+            }
+        });
         generateTestersButton.addActionListener(e -> generateTesters());
         gradeGeneratedButton.addActionListener(e -> startGrading(new File("generated_testers"), "Generated testers", true));
         edgeCaseButton.addActionListener(e -> runEdgeCases());
         manualButton.addActionListener(e -> enterManualScore());
         exportButton.addActionListener(e -> exportResults());
+        lab7Button.addActionListener(e ->
+                new Lab7CheckerFrame(submissionsField.getText().trim()).setVisible(true));
     }
     private void chooseSubmissionsFolder() {
         JFileChooser chooser = new JFileChooser(new File(submissionsField.getText()));
@@ -447,42 +533,71 @@ public class MainFrame extends JFrame {
         setControlsEnabled(false);
         File workspace = new File("workspace");
         AutoGradingService service = new AutoGradingService(workspace);
+        final boolean pythonMode = isPythonMode();
+
+        PythonValidationService pythonService =
+                new PythonValidationService(
+                        new File("assessment/is1704/template")
+                );
+
         SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
+
             @Override
             protected Void doInBackground() {
-                service.processSubmissions(submissionsFolder, new AutoGradingService.Listener() {
+
+                AutoGradingService.Listener listener =
+                        new AutoGradingService.Listener() {
+
                     @Override
                     public void onLog(String message) {
-                        SwingUtilities.invokeLater(() -> appendLog(message));
+                        SwingUtilities.invokeLater(
+                                () -> appendLog(message)
+                        );
                     }
+
                     @Override
                     public void onSubmissionFinished(SubmissionResult result) {
-                        SwingUtilities.invokeLater(() -> addSubmissionResult(result));
+                        SwingUtilities.invokeLater(
+                                () -> addSubmissionResult(result)
+                        );
                     }
+
                     @Override
                     public void onProgress(int processed, int total) {
-                        SwingUtilities.invokeLater(() -> updateProgress(processed, total));
+                        SwingUtilities.invokeLater(
+                                () -> updateProgress(processed, total)
+                        );
                     }
-                });
+                };
+
+                // Choose the validation service based on assessment mode.
+                if (pythonMode) {
+                    pythonService.processSubmissions(
+                            submissionsFolder,
+                            listener
+                    );
+                } else {
+                    service.processSubmissions(
+                            submissionsFolder,
+                            listener
+                    );
+                }
+
                 return null;
             }
+
             @Override
             protected void done() {
-                setControlsEnabled(true);
                 try {
                     get();
-                    if (!studentResults.isEmpty()) {
-                        refreshCorrectionTable();
-                        saveCorrectionHistoryCsv();
-                        progressBar.setString("Validation complete - choose Normal Grading or Generated Testers bonus");
-                    } else {
-                        detailsArea.setText("No submissions were processed.\nCheck the System Log for details.");
-                        progressBar.setString("No submissions processed");
-                    }
-                } catch (Exception e) {
+                    appendLog("Validation completed.");
+                    saveCorrectionHistoryCsv();
+                } catch (Exception ex) {
+                    appendLog("[ERROR] Validation failed: " + ex);
                     progressBar.setString("Validation failed");
-                    JOptionPane.showMessageDialog(MainFrame.this, "Unexpected error: " + e.getMessage(),
-                            "Validation Error", JOptionPane.ERROR_MESSAGE);
+                } finally {
+                    // Previously missing: buttons stayed disabled after validation.
+                    setControlsEnabled(true);
                 }
             }
         };
@@ -685,15 +800,48 @@ public class MainFrame extends JFrame {
     private void setControlsEnabled(boolean enabled) {
         busy = !enabled;
         browseButton.setEnabled(enabled);
+
+        // Prevent switching between CS102 and IS1704
+        // while validation or grading is running.
+        assessmentMode.setEnabled(enabled);
+
         validateButton.setEnabled(enabled);
         submissionsField.setEnabled(enabled);
         boolean hasValidSubmission = studentResults.stream()
                 .anyMatch(student -> !"Failed".equals(student.getSubmission().getOverallStatus()));
-        gradeOriginalButton.setEnabled(enabled && hasValidSubmission);
-        generateTestersButton.setEnabled(enabled && hasValidSubmission);
-        gradeGeneratedButton.setEnabled(enabled && hasValidSubmission && generatedTestersReadyForCurrentRun && generatedTestersReady());
-        edgeCaseButton.setEnabled(enabled && hasValidSubmission);
-        exportButton.setEnabled(enabled && studentResults.stream().anyMatch(StudentResult::isGraded));
+        // gradeOriginalButton.setEnabled(enabled && hasValidSubmission);
+        // generateTestersButton.setEnabled(enabled && hasValidSubmission);
+        // gradeGeneratedButton.setEnabled(enabled && hasValidSubmission && generatedTestersReadyForCurrentRun && generatedTestersReady());
+        // edgeCaseButton.setEnabled(enabled && hasValidSubmission);
+        
+        gradeOriginalButton.setEnabled(
+            enabled && hasValidSubmission
+        );
+        generateTestersButton.setEnabled(
+                enabled && !isPythonMode() && hasValidSubmission
+        );
+
+        gradeGeneratedButton.setEnabled(
+                enabled && !isPythonMode()
+                && hasValidSubmission
+                && generatedTestersReadyForCurrentRun
+                && generatedTestersReady()
+        );
+
+        edgeCaseButton.setEnabled(
+                enabled && !isPythonMode() && hasValidSubmission
+        );
+        
+        exportButton.setEnabled(
+            enabled
+            && studentResults.stream().anyMatch(
+                student -> !student.getQuestions().isEmpty()
+            )
+        );
+        // Lab 7 is available in Python mode without running strict lab-test validation.
+        lab7Button.setVisible(isPythonMode());
+        lab7Button.setEnabled(enabled && isPythonMode());
+        //====================
         showSelectedStudent();
     }
     private void runEdgeCases() {
@@ -835,7 +983,7 @@ public class MainFrame extends JFrame {
             appendLog("Generated testers are ready. Click Grade with Generated Testers.");
 
             generatedTestersReadyForCurrentRun = true;
-            gradeGeneratedButton.setEnabled(!busy && !studentResults.isEmpty() && generatedTestersReady());
+            gradeGeneratedButton.setEnabled(!busy && !isPythonMode() && !studentResults.isEmpty() && generatedTestersReady());
             JOptionPane.showMessageDialog(this,
                     generated.size() + " tester files generated successfully.\n\n"
                             + "Next: click Grade with Generated Testers.",
@@ -858,6 +1006,51 @@ public class MainFrame extends JFrame {
         }
         return true;
     }
+
+    /** Runs IS1704 grading without blocking the Swing event thread. */
+    private void startPythonGrading() {
+        File submissions = new File(submissionsField.getText().trim());
+        File assessment = new File("assessment/is1704");
+        if (!submissions.isDirectory()
+                || !new File(assessment, "testers/grade_submission.py").isFile()
+                || !new File(assessment, "reference").isDirectory()) {
+            JOptionPane.showMessageDialog(this,
+                    "Missing submission folder or IS1704 grading files.",
+                    "Missing Files", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        List<SubmissionResult> batch = new ArrayList<>();
+        for (StudentResult student : studentResults) batch.add(student.getSubmission());
+        setControlsEnabled(false);
+        progressBar.setValue(0);
+        progressBar.setMaximum(batch.size());
+        progressBar.setString("Starting Python grading...");
+        appendLog("=== IS1704 PYTHON GRADING STARTED ===");
+        new PythonGradingController(assessment, submissions,
+                new PythonGradingController.Listener() {
+                    @Override public void onResult(int row, List<QuestionResult> questions, String error) {
+                        StudentResult student = studentResults.get(row);
+                        student.setGradingResults(questions, error);
+                        refreshStudentRow(row);
+                        appendLog("Python grading: " + student.getSubmission().getUsername());
+                        for (QuestionResult q : questions) appendLog("  " + q);
+                        if (!error.isEmpty()) appendLog("[ERROR] " + error);
+                        else appendLog("TOTAL: " + student.getTotal() + " / " + student.getMaximum());
+                        updateProgress(row + 1, batch.size());
+                        showSelectedStudent();
+                    }
+                    @Override public void onFinished(String error) {
+                        progressBar.setString(error.isEmpty() ? "Python grading finished" : "Python grading failed");
+                        if (!error.isEmpty()) appendLog("[ERROR] " + error);
+                        appendLog("=== IS1704 GRADING FINISHED ===");
+                        setControlsEnabled(true);
+                    }
+                }).grade(batch);
+    }
+
+    // ========================================
+    // CS102 - JAVA GRADING (EXISTING)
+    // ========================================
 
     private void startGrading(File testers, String testerLabel, boolean generatedMode) {
         File workspace = new File("workspace");
@@ -1035,46 +1228,75 @@ public class MainFrame extends JFrame {
         chooser.setDialogTitle("Save Results (CSV + PDF)");
         chooser.setSelectedFile(new File("gradedscores.csv"));
 
-        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
-
-        Path csvTarget = chooser.getSelectedFile().toPath().toAbsolutePath();
-        if (!csvTarget.toString().toLowerCase(Locale.ROOT).endsWith(".csv")) csvTarget = Path.of(csvTarget + ".csv");
-
-        Path pdfTarget = csvTarget.resolveSibling(
-                csvTarget.getFileName().toString().replaceFirst("(?i)\\.csv$", "_report.pdf"));
-
-        Path template = Path.of("IS442-ScoreSheet.csv").toAbsolutePath().normalize();
-
-        if (csvTarget.normalize().equals(template)) {
-            JOptionPane.showMessageDialog(this,
-                    "Choose a different filename to preserve the original scoresheet.");
+        if (chooser.showSaveDialog(this)
+                != JFileChooser.APPROVE_OPTION) {
             return;
         }
 
+        Path csvTarget = chooser.getSelectedFile()
+                .toPath()
+                .toAbsolutePath();
+
+        if (!csvTarget.toString()
+                .toLowerCase(Locale.ROOT)
+                .endsWith(".csv")) {
+
+            csvTarget = Path.of(csvTarget + ".csv");
+        }
+
+        Path pdfTarget = csvTarget.resolveSibling(
+            csvTarget.getFileName()
+                .toString()
+                .replaceFirst("(?i)\\.csv$", "_report.pdf")
+        );
+
         if ((Files.exists(csvTarget) || Files.exists(pdfTarget))
-                && JOptionPane.showConfirmDialog(this,
-                        "Replace existing export file(s)?\n" + csvTarget + "\n" + pdfTarget,
-                        "Replace Export", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
+                && JOptionPane.showConfirmDialog(
+                    this,
+                    "Replace existing export file(s)?\n"
+                        + csvTarget + "\n" + pdfTarget,
+                    "Replace Export",
+                    JOptionPane.YES_NO_OPTION
+                ) != JOptionPane.YES_OPTION) {
+            return;
+        }
 
         try {
-            new CsvExporter(template).export(csvTarget, studentResults);
-            new PdfReportExporter().export(pdfTarget, studentResults);
+            // Template-free exporter for any assessment.
+            new DetailedCsvExporter().export(
+                csvTarget,
+                studentResults
+            );
 
-            appendLog("Saved scores: " + csvTarget);
-            appendLog("Saved PDF report: " + pdfTarget);
+            // Reuse existing PDF reporting.
+            new PdfReportExporter().export(
+                pdfTarget,
+                studentResults
+            );
 
-            JOptionPane.showMessageDialog(this,
-                    "Saved:\n" + csvTarget + "\n" + pdfTarget,
-                    "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+            appendLog("Saved CSV: " + csvTarget);
+            appendLog("Saved PDF: " + pdfTarget);
+
+            JOptionPane.showMessageDialog(
+                this,
+                "Saved:\n" + csvTarget + "\n" + pdfTarget,
+                "Export Complete",
+                JOptionPane.INFORMATION_MESSAGE
+            );
 
         } catch (IOException ex) {
+
             appendLog("[ERROR] Export: " + ex.getMessage());
-            JOptionPane.showMessageDialog(this,
-                    "Could not export the CSV/PDF.\n" + ex.getMessage(),
-                    "Export Error", JOptionPane.ERROR_MESSAGE);
+
+            JOptionPane.showMessageDialog(
+                this,
+                "Could not export the CSV/PDF.\n"
+                    + ex.getMessage(),
+                "Export Error",
+                JOptionPane.ERROR_MESSAGE
+            );
         }
     }
-
     private static class EdgeCaseUpdate {
         final int processed;
         final int total;

@@ -30,3 +30,16 @@ Thumbs.db
 # Student submissions
 submissions/*
 !submissions/.gitkeep
+
+# Student data and generated files
+assessment/is1704/lab7/*roster*.csv
+submissions/
+workspace/
+output/
+classes/
+__pycache__/
+*.pyc
+
+# Local generated documentation
+current-folder-structure.txt
+current-java-methods.txt

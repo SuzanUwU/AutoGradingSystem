@@ -63,11 +63,15 @@ public class PdfReportExporter {
         writer.addLine("QUESTION SCORES:");
         writer.addBlankLine();
 
-        addQuestion(writer, student, "Q1a");
-        addQuestion(writer, student, "Q1b");
-        addQuestion(writer, student, "Q2a");
-        addQuestion(writer, student, "Q2b");
-        addQuestion(writer, student, "Q3");
+        // Display every question returned by the grading engine.
+        // Supports Java, Python, and future assessments.
+        for (QuestionResult question : student.getQuestions()) {
+            addQuestion(
+                writer,
+                student,
+                question.getQuestionId()
+            );
+        }
 
         writer.addLine("------------------------------------------------------------");
 
