@@ -1,4 +1,4 @@
-package autograder.service;
+package autograder.validation;
 
 import java.util.ArrayList;
 

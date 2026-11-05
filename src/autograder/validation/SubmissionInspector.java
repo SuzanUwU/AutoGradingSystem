@@ -1,6 +1,5 @@
-package autograder.service;
+package autograder.validation;
 
-import autograder.validation.SubmissionValidator;
 import java.io.*;
 import java.util.*;
 import java.util.function.Consumer;
