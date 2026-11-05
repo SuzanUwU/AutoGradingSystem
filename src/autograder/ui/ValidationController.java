@@ -118,7 +118,7 @@ final class ValidationController {
 
     /** Persists correction history using the reporting layer, not the GUI. */
     private void saveCorrectionHistoryCsv() {
-        java.nio.file.Path target = java.nio.file.Path.of("workspace", "correction_history.csv");
+        java.nio.file.Path target = java.nio.file.Path.of("output", "correction_history.csv");
         try {
             new autograder.reporting.CorrectionHistoryWriter().export(target, f.studentResults);
             f.uiState.appendLog("Saved correction history: " + target);

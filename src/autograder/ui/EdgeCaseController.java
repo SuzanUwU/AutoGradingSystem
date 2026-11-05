@@ -92,7 +92,7 @@ final class EdgeCaseController {
 
                     JOptionPane.showMessageDialog(f,
                             "Edge-case testing finished.\nPassed: " + passed + " / " + total
-                                    + "\nSaved: workspace\\edge_case_results.csv"
+                                    + "\nSaved: output\\edge_case_results.csv"
                                     + "\n\nOfficial grading scores were not changed.",
                             "Edge Cases Complete", JOptionPane.INFORMATION_MESSAGE);
                 } catch (Exception ex) {
@@ -112,14 +112,10 @@ final class EdgeCaseController {
     }
 
     /** Exports diagnostic results without changing official grades. */
-    private void saveEdgeCaseResultsCsv(List<EdgeCaseRunner.Result> results) {
-        try {
-            new autograder.reporting.EdgeCaseReportWriter().export(
-                Path.of("workspace", "edge_case_results.csv"), results);
-            f.uiState.appendLog("Saved edge-case results: workspace/edge_case_results.csv");
-        } catch (IOException ex) {
-            f.uiState.appendLog("[WARNING] Could not save edge-case results: " + ex.getMessage());
-        }
+    private void saveEdgeCaseResultsCsv(List<EdgeCaseRunner.Result> results) throws IOException {
+        new autograder.reporting.EdgeCaseReportWriter().export(
+                Path.of("output", "edge_case_results.csv"), results);
+        f.uiState.appendLog("Saved edge-case results: output/edge_case_results.csv");
     }
 
     static class EdgeCaseUpdate {
