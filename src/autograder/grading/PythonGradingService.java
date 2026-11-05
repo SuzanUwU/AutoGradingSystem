@@ -1,4 +1,4 @@
-package autograder.python;
+package autograder.grading;
 
 import autograder.execution.ProcessRunner;
 import autograder.model.ExecutionResult;

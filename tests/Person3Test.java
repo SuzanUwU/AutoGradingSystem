@@ -7,7 +7,7 @@ import autograder.model.CompilationResult;
 import autograder.model.ExecutionResult;
 import autograder.model.QuestionSpec;
 import autograder.model.SubmissionResult;
-import autograder.service.AutoGradingService;
+import autograder.validation.JavaValidationService;
 
 import java.io.File;
 import java.io.IOException;
@@ -112,7 +112,7 @@ public class Person3Test {
     /** Runs Person 2's Step 1 (extract, correct, validate) and returns the usernames it processed. */
     private static List<String> runStep1(File submissionsFolder, File step1Folder) {
         List<String> usernames = new ArrayList<>();
-        new AutoGradingService(step1Folder).processSubmissions(submissionsFolder, new AutoGradingService.Listener() {
+        new JavaValidationService(step1Folder).processSubmissions(submissionsFolder, new JavaValidationService.Listener() {
             @Override public void onLog(String message) { }
             @Override public void onSubmissionFinished(SubmissionResult result) { usernames.add(result.getUsername()); }
             @Override public void onProgress(int processed, int total) { }

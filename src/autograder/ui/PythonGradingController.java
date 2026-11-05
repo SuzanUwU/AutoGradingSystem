@@ -1,7 +1,7 @@
 package autograder.ui;
 
-import autograder.python.PythonGradingService;
 import autograder.model.SubmissionResult;
+import autograder.grading.PythonGradingService;
 import autograder.model.QuestionResult;
 import javax.swing.*;
 import java.io.*;

@@ -1,7 +1,7 @@
-package autograder.python;
+package autograder.validation;
 
 import autograder.model.SubmissionResult;
-import autograder.service.AutoGradingService;
+
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -26,7 +26,7 @@ public final class PythonValidationService {
         this.correctedDirectory = correctedDirectory.toPath();
     }
 
-    public void processSubmissions(File directory, AutoGradingService.Listener listener) {
+    public void processSubmissions(File directory, JavaValidationService.Listener listener) {
         File[] files = directory.listFiles(f -> f.isFile() && f.getName().toLowerCase(Locale.ROOT).endsWith(".zip"));
         if (files == null) files = new File[0];
         Arrays.sort(files, Comparator.comparing(File::getName));
