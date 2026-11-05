@@ -706,7 +706,7 @@ public class MainFrame extends JFrame {
     }
 
     private void saveCorrectionHistoryCsv() {
-        Path output = Path.of("workspace", "correction_history.csv");
+        Path output = Path.of("output", "correction_history.csv");
         ArrayList<String> lines = new ArrayList<>();
         lines.add("Student,Folder Fixes,Name Fixes,Email Fixes,Open Issues,Anomalies,Total Fixes,Status,Folder Details,Name Details,Email Details,Open Issue Details,Anomaly Details");
         for (StudentResult student : studentResults) {
@@ -940,42 +940,53 @@ public class MainFrame extends JFrame {
     }
 
     private void saveEdgeCaseResultsCsv(List<EdgeCaseRunner.Result> results) {
-        Path output = Path.of("workspace", "edge_case_results.csv");
+        Path output = Path.of("output", "edge_case_results.csv");
         ArrayList<String> lines = new ArrayList<>();
 
-        lines.add("Student,Validation Status,Grading Status,Q1a (/7.0),Q1b (/9.0),Q2a (/7.0),Q2b (/6.0),Q3 (/16.0),Total,Maximum,Status");
+        lines.add("Student,Q1a (/7.0),Q1b (/9.0),Q2a (/7.0),Q2b (/6.0),Q3 (/16.0),Total,Maximum,Failed Cases,Edge Test Status");
 
         for (EdgeCaseRunner.Result result : results) {
-            StudentResult student = null;
 
-            for (StudentResult s : studentResults) {
-                if (s.getSubmission().getUsername().equals(result.getUsername())) {
-                    student = s;
-                    break;
+            String total = "";
+            String maximum = "";
+            String failedCases = "";
+            String status;
+
+            if (result.isSkipped()) {
+                status = "Skipped";
+
+                if (result.getError() != null && !result.getError().isBlank()) {
+                    status += ": " + result.getError();
                 }
+
+            } else {
+                total = Integer.toString(result.getPassed());
+                maximum = Integer.toString(result.getTotal());
+                failedCases = Integer.toString(
+                        result.getTotal() - result.getPassed()
+                );
+
+                status = "Completed";
             }
 
-            String validationStatus = student == null ? "" : student.getSubmission().getOverallStatus();
-            String gradingStatus = student == null ? "" : student.getGradingStatus();
-
             lines.add(csvValue(result.getUsername()) + ","
-                    + csvValue(validationStatus) + ","
-                    + csvValue(gradingStatus) + ","
                     + edgeScore(result, "Q1a") + ","
                     + edgeScore(result, "Q1b") + ","
                     + edgeScore(result, "Q2a") + ","
                     + edgeScore(result, "Q2b") + ","
                     + edgeScore(result, "Q3") + ","
-                    + (result.isSkipped() ? "" : result.getPassed()) + ","
-                    + (result.isSkipped() ? "" : result.getTotal()) + ","
-                    + csvValue(result.isSkipped() ? result.getError() : "Completed"));
+                    + total + ","
+                    + maximum + ","
+                    + failedCases + ","
+                    + csvValue(status));
         }
 
         try {
             Files.write(output, lines, StandardCharsets.UTF_8);
             appendLog("Saved edge-case results: " + output);
         } catch (IOException e) {
-            appendLog("[WARNING] Could not save edge_case_results.csv: " + e.getMessage());
+            appendLog("[WARNING] Could not save edge_case_results.csv: "
+                    + e.getMessage());
         }
     }
 
