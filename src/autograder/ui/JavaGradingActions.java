@@ -38,6 +38,20 @@ final class JavaGradingActions {
             currentBatch.add(student.getSubmission());
         }
 
+        // Clear only the results for the grading mode being run
+        if (generatedMode) {
+            for (int row = 0; row < f.generatedTotals.size(); row++) {
+                f.generatedTotals.set(row, "");
+                f.results.refreshStudentRow(row);
+            }
+        } else {
+            for (int row = 0; row < f.studentResults.size(); row++) {
+                f.studentResults.get(row).clearGradingResults();
+                f.results.refreshStudentRow(row);
+            }
+            f.results.showSelectedStudent();
+        }
+
         f.uiState.setControlsEnabled(false);
         f.progressBar.setValue(0);
         f.progressBar.setString("Starting grading with " + testerLabel + "...");

@@ -31,6 +31,14 @@ public class StudentResult {
         graded = true;
     }
 
+    public void clearGradingResults() {
+        questions.clear();
+        manualScores.clear();
+        comments.clear();
+        gradingError = "";
+        graded = false;
+    }
+
     public void setManualScore(String questionId, double score, String comment) {
         QuestionResult question = questions.stream()
                 .filter(q -> q.getQuestionId().equals(questionId)).findFirst()
