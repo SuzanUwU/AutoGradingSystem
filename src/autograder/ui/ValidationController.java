@@ -30,6 +30,7 @@ final class ValidationController {
         f.correctionTableModel.setRowCount(0);
         f.studentResults.clear();
         f.generatedTotals.clear();
+        f.plagiarismResults.clear();
         f.mostFixesLabel.setText("Most fixes: -");
         f.correctionDetailArea.setText("Validation in progress...");
         f.searchField.setText("");
@@ -53,6 +54,8 @@ final class ValidationController {
                 );
 
         SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
+            private java.util.Map<String, PlagarismCheck.Result> similarity = java.util.Map.of();
+            private String similarityError;
 
             @Override
             protected Void doInBackground() {
@@ -95,6 +98,15 @@ final class ValidationController {
                     );
                 }
 
+                // Similarity checking is available only for Java assessments.
+                if (!pythonMode) {
+                    listener.onLog("Checking code similarity across matching Java questions...");
+                    try {
+                        similarity = new PlagarismCheck().check(submissionsFolder.toPath());
+                    } catch (Exception ex) {
+                        similarityError = ex.getMessage();
+                    }
+                }
                 return null;
             }
 
@@ -102,6 +114,18 @@ final class ValidationController {
             protected void done() {
                 try {
                     get();
+                    if (!pythonMode) {
+                        f.plagiarismResults.putAll(similarity);
+                        for (int row = 0; row < f.studentResults.size(); row++) f.results.refreshStudentRow(row);
+                        f.results.showSelectedStudent();
+                        if (similarityError != null) {
+                            f.uiState.appendLog("[WARNING] Similarity check failed: " + similarityError);
+                        } else {
+                            long flagged = similarity.values().stream()
+                                    .filter(result -> result.getStatus().equals("Suspected - review")).count();
+                            f.uiState.appendLog("Similarity check complete: " + flagged + " student(s) flagged for review.");
+                        }
+                    }
                     f.uiState.appendLog("Validation completed.");
                     saveCorrectionHistoryCsv();
                 } catch (Exception ex) {

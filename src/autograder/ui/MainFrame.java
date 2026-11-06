@@ -114,6 +114,9 @@ public class MainFrame extends JFrame {
     // These can be displayed alongside original tester scores.
     final ArrayList<String> generatedTotals = new ArrayList<>();
 
+    // GUI-only similarity results; grading and exported marks remain independent.
+    final java.util.Map<String, PlagarismCheck.Result> plagiarismResults = new java.util.LinkedHashMap<>();
+
     // =========================================================
     // 5. SUMMARY AND LOG COMPONENTS
     // =========================================================
@@ -251,7 +254,7 @@ public class MainFrame extends JFrame {
         // 10. INITIALIZE STUDENT RESULTS TABLE
         // =====================================================
 
-        // Create a table model with seven columns.
+        // Create a table model with eight columns.
         // The second argument (0) means the table starts with zero rows.
         tableModel = new DefaultTableModel(
                 new Object[] {
@@ -261,7 +264,8 @@ public class MainFrame extends JFrame {
                     "Status",
                     "Grading",
                     "Total (Original Testers)",
-                    "Total (Generated Testers)"
+                    "Total (Generated Testers)",
+                    "Plagiarism Check"
                 },
                 0
         ) {

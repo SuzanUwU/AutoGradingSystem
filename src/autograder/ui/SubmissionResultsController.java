@@ -10,7 +10,19 @@ import autograder.model.*;
 /** SubmissionResultsController responsibilities extracted from MainFrame. */
 final class SubmissionResultsController {
     private final MainFrame f;
+    private javax.swing.table.TableColumn plagiarismColumn;
     SubmissionResultsController(MainFrame frame) { this.f = frame; }
+
+    /** Keep the similarity column exclusive to the Java assessment view. */
+    void updatePlagiarismColumn() {
+        int viewColumn = f.resultTable.convertColumnIndexToView(7);
+        if (viewColumn >= 0) {
+            plagiarismColumn = f.resultTable.getColumnModel().getColumn(viewColumn);
+            if (f.isPythonMode()) f.resultTable.removeColumn(plagiarismColumn);
+        } else if (!f.isPythonMode() && plagiarismColumn != null) {
+            f.resultTable.addColumn(plagiarismColumn);
+        }
+    }
 
     /** Handles add submission result. */
     void addSubmissionResult(SubmissionResult result) {
@@ -19,7 +31,7 @@ final class SubmissionResultsController {
         f.generatedTotals.add("");
         f.tableModel.addRow(new Object[] {
                 result.getUsername(), result.getStructureStatus(), result.getHeaderStatus(), result.getOverallStatus(),
-                "Not graded", "", ""
+                "Not graded", "", "", f.isPythonMode() ? "" : "Checking..."
         });
         updateSummary();
         refreshCorrectionTable();
@@ -40,7 +52,14 @@ final class SubmissionResultsController {
         int modelRow = f.resultTable.convertRowIndexToModel(viewRow);
         if (modelRow >= f.studentResults.size()) return;
         StudentResult student = f.studentResults.get(modelRow);
-        f.detailsArea.setText(student.getDetails());
+        String details = student.getDetails();
+        if (!f.isPythonMode()) {
+            PlagarismCheck.Result similarity = f.plagiarismResults.get(student.getSubmission().getUsername());
+            String similarityDetails = similarity == null ? "No similarity result available yet."
+                    : similarity.getStatus() + "\n" + similarity.getDetails();
+            details += "\n\nCODE SIMILARITY CHECK\n" + similarityDetails;
+        }
+        f.detailsArea.setText(details);
         showCorrectionSummary(student.getSubmission());
         selectCorrectionRow(student.getSubmission().getUsername());
         f.manualButton.setEnabled(!f.busy && !student.getQuestions().isEmpty());
@@ -174,5 +193,9 @@ final class SubmissionResultsController {
         f.tableModel.setValueAt(student.getGradingStatus(), row, 4);
         f.tableModel.setValueAt(student.getQuestions().isEmpty() ? "" : student.getTotal() + " / " + student.getMaximum(), row, 5);
         f.tableModel.setValueAt(row < f.generatedTotals.size() ? f.generatedTotals.get(row) : "", row, 6);
+        if (!f.isPythonMode()) {
+            PlagarismCheck.Result similarity = f.plagiarismResults.get(submission.getUsername());
+            f.tableModel.setValueAt(similarity == null ? "Could not check" : similarity.getStatus(), row, 7);
+        }
     }
 }

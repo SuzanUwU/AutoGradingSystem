@@ -18,9 +18,12 @@ public final class StatusCellRenderer extends DefaultTableCellRenderer {
             label.setBackground(Color.WHITE);
             label.setForeground(Color.BLACK);
             switch (status) {
+                case "No match found":
                 case "Valid": label.setBackground(new Color(220,245,224)); label.setForeground(new Color(28,94,45)); break;
                 case "Corrected": label.setBackground(new Color(219,234,254)); label.setForeground(new Color(30,64,175)); break;
+                case "Suspected - review":
                 case "Review": label.setBackground(new Color(254,243,199)); label.setForeground(new Color(146,64,14)); break;
+                case "Could not check":
                 case "Failed": label.setBackground(new Color(254,226,226)); label.setForeground(new Color(153,27,27)); break;
                 default: break;
             }

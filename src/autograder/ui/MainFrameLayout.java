@@ -361,6 +361,8 @@ final class MainFrameLayout {
         f.resultTable.getColumnModel()
             .getColumn(3).setCellRenderer(statusRenderer);
 
+        f.resultTable.getColumnModel().getColumn(7).setCellRenderer(statusRenderer);
+
         // Create a separate renderer for grading status.
         DefaultTableCellRenderer gradingRenderer =
             new DefaultTableCellRenderer() {
@@ -492,6 +494,9 @@ final class MainFrameLayout {
 
         f.resultTable.getColumnModel()
             .getColumn(6).setPreferredWidth(155);
+
+        f.resultTable.getColumnModel().getColumn(7).setPreferredWidth(175);
+        f.resultTable.getColumnModel().getColumn(7).setMinWidth(150);
 
         JPanel tablePanel = new JPanel(new BorderLayout());
 

@@ -65,6 +65,7 @@ final class MainFrameActions {
         }
 
         boolean python = f.isPythonMode();
+        f.results.updatePlagiarismColumn();
 
         f.setTitle(python
                 ? "IS1704 Auto Grading System - Python"
@@ -77,6 +78,7 @@ final class MainFrameActions {
         // Clear results from the previous assessment.
         f.studentResults.clear();
         f.generatedTotals.clear();
+        f.plagiarismResults.clear();
 
         f.tableModel.setRowCount(0);
         f.correctionTableModel.setRowCount(0);
