@@ -15,7 +15,7 @@ public final class StatusCellRenderer extends DefaultTableCellRenderer {
 
         String status = value == null ? "" : value.toString();
         label.setHorizontalAlignment(JLabel.CENTER);
-        label.setFont(table.getFont().deriveFont(Font.BOLD));
+        label.setFont(table.getFont().deriveFont("No match found".equals(status) ? Font.PLAIN : Font.BOLD));
 
         if (!isSelected) {
             label.setBackground(Color.WHITE);
