@@ -30,6 +30,16 @@ public class PdfReportExporter {
     private static final Color LIGHT_RED = new Color(251, 231, 229);
     private static final Color WHITE = Color.WHITE;
 
+    private static final Color VALID_BG = new Color(220, 245, 220);
+    private static final Color CORRECTED_BG = new Color(220, 235, 255);
+    private static final Color REVIEW_BG = new Color(255, 242, 194);
+    private static final Color FAILED_BG = new Color(255, 220, 220);
+
+    private static final Color VALID_TEXT = new Color(20, 110, 40);
+    private static final Color CORRECTED_TEXT = new Color(35, 85, 200);
+    private static final Color REVIEW_TEXT = new Color(180, 90, 0);
+    private static final Color FAILED_TEXT = new Color(190, 30, 30);
+
     private static final PDType1Font normal = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
     private static final PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
 
@@ -39,10 +49,7 @@ public class PdfReportExporter {
     }
 
     // Updated export method to include edge-case results and assessment type.
-    public void export(Path reportFile, List<StudentResult> students,
-                       Map<String, EdgeCaseRunner.Result> edgeResults,
-                       String assessment) throws IOException {
-
+    public void export(Path reportFile, List<StudentResult> students, Map<String, EdgeCaseRunner.Result> edgeResults, String assessment) throws IOException {
         if (reportFile == null) throw new IOException("The PDF report path cannot be empty.");
         if (students == null) throw new IOException("Student results cannot be null.");
         if (edgeResults == null) edgeResults = Map.of();
@@ -53,7 +60,6 @@ public class PdfReportExporter {
         // create pdf with batch summary, student reports and review queue
         try (PDDocument document = new PDDocument()) {
             ReportWriter writer = new ReportWriter(document);
-
             addBatchSummary(writer, students, edgeResults, assessment);
 
             for (StudentResult student : students) {
@@ -63,19 +69,14 @@ public class PdfReportExporter {
 
             writer.newPage();
             addReviewQueue(writer, students, edgeResults);
-
             writer.close();
             document.save(absolutePath.toFile());
         }
     }
 
     // Display overall grading, validation, correction and edge-case information.
-    private void addBatchSummary(ReportWriter writer, List<StudentResult> students,
-                                 Map<String, EdgeCaseRunner.Result> edgeResults,
-                                 String assessment) throws IOException {
-
-        writer.addTitle("AUTO GRADING REPORT",
-                assessment + " | " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm")));
+    private void addBatchSummary(ReportWriter writer, List<StudentResult> students, Map<String, EdgeCaseRunner.Result> edgeResults, String assessment) throws IOException {
+        writer.addTitle("AUTO GRADING REPORT", assessment + " | " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm")));
 
         int total = students.size(), graded = 0, review = 0, failed = 0;
 
@@ -85,7 +86,7 @@ public class PdfReportExporter {
             if ("Failed".equalsIgnoreCase(student.getSubmission().getOverallStatus())) failed++;
         }
 
-        writer.addCards(new String[][] {
+        writer.addCards(new String[][]{
                 {"STUDENTS", String.valueOf(total)},
                 {"GRADED", String.valueOf(graded)},
                 {"REVIEW", String.valueOf(review)},
@@ -95,40 +96,41 @@ public class PdfReportExporter {
         writer.addSection("Validation Overview");
 
         List<String[]> validationRows = new ArrayList<>();
+
         for (String status : List.of("Valid", "Corrected", "Review", "Failed")) {
             int count = 0;
+
             for (StudentResult student : students)
                 if (status.equalsIgnoreCase(student.getSubmission().getOverallStatus())) count++;
 
             String percentage = total == 0 ? "0%" : String.format(Locale.ROOT, "%.1f%%", count * 100.0 / total);
-            validationRows.add(new String[] {status, String.valueOf(count), percentage});
+            validationRows.add(new String[]{status, String.valueOf(count), percentage});
         }
 
-        writer.addTable(new String[] {"Status", "Students", "Percentage"}, validationRows, .45f, .25f, .30f);
+        writer.addTable(new String[]{"Status", "Students", "Percentage"}, validationRows, .45f, .25f, .30f);
 
         writer.addSection("Grade Statistics");
 
         List<StudentResult> gradedStudents = new ArrayList<>();
-        for (StudentResult student : students)
-            if (!student.getQuestions().isEmpty()) gradedStudents.add(student);
+        for (StudentResult student : students) if (!student.getQuestions().isEmpty()) gradedStudents.add(student);
 
         List<String[]> gradeRows = new ArrayList<>();
 
         if (gradedStudents.isEmpty()) {
-            gradeRows.add(new String[] {"Average", "Not available"});
-            gradeRows.add(new String[] {"Highest", "Not available"});
-            gradeRows.add(new String[] {"Lowest", "Not available"});
+            gradeRows.add(new String[]{"Average", "Not available"});
+            gradeRows.add(new String[]{"Highest", "Not available"});
+            gradeRows.add(new String[]{"Lowest", "Not available"});
         } else {
             double average = gradedStudents.stream().mapToDouble(StudentResult::getTotal).average().orElse(0);
             StudentResult highest = Collections.max(gradedStudents, Comparator.comparingDouble(StudentResult::getTotal));
             StudentResult lowest = Collections.min(gradedStudents, Comparator.comparingDouble(StudentResult::getTotal));
 
-            gradeRows.add(new String[] {"Average", String.format(Locale.ROOT, "%.2f", average)});
-            gradeRows.add(new String[] {"Highest", formatScore(highest) + " (" + highest.getSubmission().getUsername() + ")"});
-            gradeRows.add(new String[] {"Lowest", formatScore(lowest) + " (" + lowest.getSubmission().getUsername() + ")"});
+            gradeRows.add(new String[]{"Average", String.format(Locale.ROOT, "%.2f", average)});
+            gradeRows.add(new String[]{"Highest", formatScore(highest) + " (" + highest.getSubmission().getUsername() + ")"});
+            gradeRows.add(new String[]{"Lowest", formatScore(lowest) + " (" + lowest.getSubmission().getUsername() + ")"});
         }
 
-        writer.addTable(new String[] {"Metric", "Result"}, gradeRows, .35f, .65f);
+        writer.addTable(new String[]{"Metric", "Result"}, gradeRows, .35f, .65f);
 
         writer.addSection("Correction Overview");
 
@@ -143,12 +145,12 @@ public class PdfReportExporter {
             anomaly += submission.getAnomalyCount();
         }
 
-        writer.addTable(new String[] {"Category", "Total"}, List.of(
-                new String[] {"Folder corrections", String.valueOf(folder)},
-                new String[] {"Name corrections", String.valueOf(name)},
-                new String[] {"Email corrections", String.valueOf(email)},
-                new String[] {"Open issues", String.valueOf(open)},
-                new String[] {"Anomalies", String.valueOf(anomaly)}
+        writer.addTable(new String[]{"Category", "Total"}, List.of(
+                new String[]{"Folder corrections", String.valueOf(folder)},
+                new String[]{"Name corrections", String.valueOf(name)},
+                new String[]{"Email corrections", String.valueOf(email)},
+                new String[]{"Open issues", String.valueOf(open)},
+                new String[]{"Anomalies", String.valueOf(anomaly)}
         ), .70f, .30f);
 
         writer.addSection("Edge-Case Overview");
@@ -166,31 +168,25 @@ public class PdfReportExporter {
                 }
             }
 
-            writer.addTable(new String[] {"Metric", "Result"}, List.of(
-                    new String[] {"Cases passed", passed + " / " + possible},
-                    new String[] {"Cases failed", String.valueOf(Math.max(0, possible - passed))},
-                    new String[] {"Students skipped", String.valueOf(skipped)}
+            writer.addTable(new String[]{"Metric", "Result"}, List.of(
+                    new String[]{"Cases passed", passed + " / " + possible},
+                    new String[]{"Cases failed", String.valueOf(Math.max(0, possible - passed))},
+                    new String[]{"Students skipped", String.valueOf(skipped)}
             ), .70f, .30f);
-
-            writer.addNote("Edge-case results are diagnostic only and do not affect official grades.");
         }
     }
 
     // Display individual student grading, correction history and edge-case results.
-    private void addStudentReport(ReportWriter writer, StudentResult student,
-                                  EdgeCaseRunner.Result edgeResult) throws IOException {
-
+    private void addStudentReport(ReportWriter writer, StudentResult student, EdgeCaseRunner.Result edgeResult) throws IOException {
         SubmissionResult submission = student.getSubmission();
 
         writer.addTitle(formatUsername(submission.getUsername()), "Individual Student Report");
 
-        writer.addCards(new String[][] {
+        writer.addCards(new String[][]{
                 {"VALIDATION", submission.getOverallStatus()},
                 {"GRADING", student.getGradingStatus()},
                 {"SCORE", student.getQuestions().isEmpty() ? "N/A" : formatScore(student)},
-                {"EDGE CASES", edgeResult == null ? "Not run"
-                        : edgeResult.isSkipped() ? "Skipped"
-                        : edgeResult.getPassed() + "/" + edgeResult.getTotal()}
+                {"EDGE CASES", edgeResult == null ? "Not run" : edgeResult.isSkipped() ? "Skipped" : edgeResult.getPassed() + "/" + edgeResult.getTotal()}
         });
 
         writer.addSection("Official Grades");
@@ -200,10 +196,9 @@ public class PdfReportExporter {
         // Display every question returned by the grading engine.
         // Supports Java, Python, and future assessments.
         for (QuestionResult question : student.getQuestions()) {
-            String manualMark = student.hasManualScore(question.getQuestionId())
-                    ? String.format(Locale.ROOT, "%.1f", student.getFinalScore(question)) : "-";
+            String manualMark = student.hasManualScore(question.getQuestionId()) ? String.format(Locale.ROOT, "%.1f", student.getFinalScore(question)) : "-";
 
-            questionRows.add(new String[] {
+            questionRows.add(new String[]{
                     question.getQuestionId(),
                     String.format(Locale.ROOT, "%.1f", question.getScore()),
                     manualMark,
@@ -213,20 +208,20 @@ public class PdfReportExporter {
             });
         }
 
-        if (questionRows.isEmpty()) questionRows.add(new String[] {"-", "-", "-", "-", "-", "No grading result"});
+        if (questionRows.isEmpty()) questionRows.add(new String[]{"-", "-", "-", "-", "-", "No grading result"});
 
-        writer.addTable(new String[] {"Question", "Auto", "Manual", "Final", "Max", "Status"},
+        writer.addTable(new String[]{"Question", "Auto", "Manual", "Final", "Max", "Status"},
                 questionRows, .14f, .11f, .12f, .11f, .10f, .42f);
 
-        // Correction history is now included in the PDF instead of a separate CSV.
+        // Correction history is included in the PDF report
         writer.addSection("Validation & Correction History");
 
-        writer.addTable(new String[] {"Category", "Count", "Details"}, List.of(
-                new String[] {"Folder", String.valueOf(submission.getFolderFixCount()), details(submission.getFolderFixDetails())},
-                new String[] {"Name", String.valueOf(submission.getNameFixCount()), details(submission.getNameFixDetails())},
-                new String[] {"Email", String.valueOf(submission.getEmailFixCount()), details(submission.getEmailFixDetails())},
-                new String[] {"Open Issues", String.valueOf(submission.getOpenIssueCount()), details(submission.getOpenIssueDetails())},
-                new String[] {"Anomalies", String.valueOf(submission.getAnomalyCount()), details(submission.getAnomalyDetails())}
+        writer.addTable(new String[]{"Category", "Count", "Details"}, List.of(
+                new String[]{"Folder", String.valueOf(submission.getFolderFixCount()), details(submission.getFolderFixDetails())},
+                new String[]{"Name", String.valueOf(submission.getNameFixCount()), details(submission.getNameFixDetails())},
+                new String[]{"Email", String.valueOf(submission.getEmailFixCount()), details(submission.getEmailFixDetails())},
+                new String[]{"Open Issues", String.valueOf(submission.getOpenIssueCount()), details(submission.getOpenIssueDetails())},
+                new String[]{"Anomalies", String.valueOf(submission.getAnomalyCount()), details(submission.getAnomalyDetails())}
         ), .20f, .12f, .68f);
 
         writer.addSection("Remaining Issues / Review Items");
@@ -238,9 +233,9 @@ public class PdfReportExporter {
         addIssues(issues, "Q3", submission.getQ3Issues());
 
         if (issues.isEmpty()) writer.addNote("No remaining issues requiring review.");
-        else writer.addTable(new String[] {"Scope", "Finding"}, issues, .20f, .80f);
+        else writer.addTable(new String[]{"Scope", "Finding"}, issues, .20f, .80f);
 
-        // Edge-case results are now included in the PDF instead of a separate CSV.
+        // Edge-case results are included in the PDF report
         writer.addSection("Edge-Case Diagnostics");
 
         if (edgeResult == null) {
@@ -257,7 +252,7 @@ public class PdfReportExporter {
                 String result = question.getPassed() == question.getTotal() ? "Pass"
                         : question.getPassed() == 0 ? "Failed" : "Partial";
 
-                edgeRows.add(new String[] {
+                edgeRows.add(new String[]{
                         questionId,
                         String.valueOf(question.getPassed()),
                         String.valueOf(question.getTotal()),
@@ -266,20 +261,16 @@ public class PdfReportExporter {
                 });
             }
 
-            writer.addTable(new String[] {"Question", "Passed", "Total", "Result", "Status"},
+            writer.addTable(new String[]{"Question", "Passed", "Total", "Result", "Status"},
                     edgeRows, .16f, .13f, .12f, .18f, .41f);
-
-            writer.addNote("Diagnostic only. Edge-case results do not affect the official grade.");
         }
-
-        writer.addSection("Manual Score Adjustments");
 
         List<String[]> manualRows = new ArrayList<>();
 
         for (QuestionResult question : student.getQuestions()) {
             if (!student.hasManualScore(question.getQuestionId())) continue;
 
-            manualRows.add(new String[] {
+            manualRows.add(new String[]{
                     question.getQuestionId(),
                     String.format(Locale.ROOT, "%.1f", question.getScore()),
                     String.format(Locale.ROOT, "%.1f", student.getFinalScore(question)),
@@ -287,15 +278,15 @@ public class PdfReportExporter {
             });
         }
 
-        if (manualRows.isEmpty()) writer.addNote("No manual score adjustments were applied.");
-        else writer.addTable(new String[] {"Question", "Original", "Final", "Reason"},
-                manualRows, .15f, .15f, .15f, .55f);
+        // Only show this section when a manual score exists.
+        if (!manualRows.isEmpty()) {
+            writer.addSection("Manual Score Adjustments");
+            writer.addTable(new String[]{"Question", "Original", "Final", "Reason"}, manualRows, .15f, .15f, .15f, .55f);
+        }
     }
 
     // Display students that may need the professor's attention.
-    private void addReviewQueue(ReportWriter writer, List<StudentResult> students,
-                                Map<String, EdgeCaseRunner.Result> edgeResults) throws IOException {
-
+    private void addReviewQueue(ReportWriter writer, List<StudentResult> students, Map<String, EdgeCaseRunner.Result> edgeResults) throws IOException {
         writer.addTitle("REVIEW QUEUE", "Students requiring instructor attention");
 
         List<String[]> rows = new ArrayList<>();
@@ -306,19 +297,16 @@ public class PdfReportExporter {
 
             if (!student.needsAttention() && !edgeIssue) continue;
 
-            rows.add(new String[] {
+            rows.add(new String[]{
                     formatUsername(student.getSubmission().getUsername()),
                     student.getSubmission().getOverallStatus(),
                     student.getGradingStatus(),
-                    edgeResult == null ? "Not run"
-                            : edgeResult.isSkipped() ? "Skipped"
-                            : edgeResult.getPassed() + "/" + edgeResult.getTotal()
+                    edgeResult == null ? "Not run" : edgeResult.isSkipped() ? "Skipped" : edgeResult.getPassed() + "/" + edgeResult.getTotal()
             });
         }
 
         if (rows.isEmpty()) writer.addNote("No students currently require review.");
-        else writer.addTable(new String[] {"Student", "Validation", "Grading", "Edge Cases"},
-                rows, .35f, .22f, .22f, .21f);
+        else writer.addTable(new String[]{"Student", "Validation", "Grading", "Edge Cases"}, rows, .35f, .22f, .22f, .21f);
     }
 
     private static String formatScore(StudentResult student) {
@@ -330,9 +318,7 @@ public class PdfReportExporter {
     }
 
     private static void addIssues(List<String[]> rows, String scope, List<String> issues) {
-        if (issues != null)
-            for (String issue : issues)
-                if (issue != null && !issue.isBlank()) rows.add(new String[] {scope, issue});
+        if (issues != null) for (String issue : issues) if (issue != null && !issue.isBlank()) rows.add(new String[]{scope, issue});
     }
 
     // format username to have # infront
@@ -385,40 +371,43 @@ public class PdfReportExporter {
         }
 
         private void addCards(String[][] cards) throws IOException {
-            ensureSpace(65);
+            ensureSpace(52);
             float gap = 7;
             float cardWidth = (getWidth() - gap * (cards.length - 1)) / cards.length;
 
             for (int i = 0; i < cards.length; i++) {
                 float x = margin + i * (cardWidth + gap);
-                drawBox(x, y - 50, cardWidth, 50, getStatusColor(cards[i][1]));
-                drawBorder(x, y - 50, cardWidth, 50);
-                addText(cards[i][0], x + 6, y - 13, bold, 7, DARK);
 
-                List<String> lines = wrapText(cards[i][1], bold, 11, cardWidth - 12);
+                // Keep summary boxes neutral without status colours.
+                drawBox(x, y - 38, cardWidth, 38, LIGHT_GRAY);
+                drawBorder(x, y - 38, cardWidth, 38);
+                addText(cards[i][0], x + 6, y - 11, bold, 7, DARK);
+
+                List<String> lines = wrapText(cards[i][1], bold, 10, cardWidth - 12);
+
                 for (int j = 0; j < Math.min(2, lines.size()); j++)
-                    addText(lines.get(j), x + 6, y - 29 - j * 11, bold, 11, DARK);
+                    addText(lines.get(j), x + 6, y - 25 - j * 10, bold, 10, DARK);
             }
 
-            y -= 64;
+            y -= 50;
         }
 
         private void addSection(String title) throws IOException {
-            ensureSpace(26);
-            drawBox(margin, y - 18, 4, 18, GREEN);
-            addText(title, margin + 9, y - 13, bold, 11, DARK);
-            y -= 25;
+            ensureSpace(24);
+            addText(title, margin, y - 13, bold, 11, DARK);
+            y -= 24;
         }
 
         private void addNote(String text) throws IOException {
             List<String> lines = wrapText(text, normal, 8, getWidth() - 16);
             float height = Math.max(26, lines.size() * 10 + 12);
-            ensureSpace(height + 6);
 
+            ensureSpace(height + 6);
             drawBox(margin, y - height, getWidth(), height, LIGHT_GRAY);
             drawBorder(margin, y - height, getWidth(), height);
 
             float lineY = y - 15;
+
             for (String line : lines) {
                 addText(line, margin + 8, lineY, normal, 8, DARK);
                 lineY -= 10;
@@ -430,6 +419,7 @@ public class PdfReportExporter {
         private void addTable(String[] headers, List<String[]> rows, float... ratios) throws IOException {
             float[] widths = getWidths(ratios);
             addTableHeader(headers, widths);
+
             boolean alternate = false;
 
             for (String[] row : rows) {
@@ -445,14 +435,32 @@ public class PdfReportExporter {
                 for (int i = 0; i < widths.length; i++) {
                     String value = i < row.length && row[i] != null ? row[i] : "";
 
-                    drawBox(x, y - rowHeight, widths[i], rowHeight, alternate ? LIGHT_GRAY : WHITE);
+                    // Keep the existing table design, but colour status cells like the GUI.
+                    Color background = alternate ? LIGHT_GRAY : WHITE;
+                    Color textColor = DARK;
+
+                    if (value.equalsIgnoreCase("Valid")) {
+                        background = VALID_BG;
+                        textColor = VALID_TEXT;
+                    } else if (value.equalsIgnoreCase("Corrected")) {
+                        background = CORRECTED_BG;
+                        textColor = CORRECTED_TEXT;
+                    } else if (value.equalsIgnoreCase("Review")) {
+                        background = REVIEW_BG;
+                        textColor = REVIEW_TEXT;
+                    } else if (value.equalsIgnoreCase("Failed")) {
+                        background = FAILED_BG;
+                        textColor = FAILED_TEXT;
+                    }
+
+                    drawBox(x, y - rowHeight, widths[i], rowHeight, background);
                     drawBorder(x, y - rowHeight, widths[i], rowHeight);
 
                     List<String> lines = wrapText(value, normal, 8, widths[i] - 8);
                     float lineY = y - 13;
 
                     for (String line : lines) {
-                        addText(line, x + 4, lineY, normal, 8, DARK);
+                        addText(line, x + 4, lineY, normal, 8, textColor);
                         lineY -= 10;
                     }
 
@@ -496,6 +504,7 @@ public class PdfReportExporter {
 
             float[] widths = new float[ratios.length];
             for (int i = 0; i < ratios.length; i++) widths[i] = getWidth() * ratios[i] / total;
+
             return widths;
         }
 
