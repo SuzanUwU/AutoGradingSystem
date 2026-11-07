@@ -30,6 +30,7 @@ final class ValidationController {
         f.correctionTableModel.setRowCount(0);
         f.studentResults.clear();
         f.generatedTotals.clear();
+        f.edgeCaseResults.clear();
         f.mostFixesLabel.setText("Most fixes: -");
         f.correctionDetailArea.setText("Validation in progress...");
         f.searchField.setText("");
@@ -103,7 +104,6 @@ final class ValidationController {
                 try {
                     get();
                     f.uiState.appendLog("Validation completed.");
-                    saveCorrectionHistoryCsv();
                 } catch (Exception ex) {
                     f.uiState.appendLog("[ERROR] Validation failed: " + ex);
                     f.progressBar.setString("Validation failed");
@@ -114,19 +114,5 @@ final class ValidationController {
             }
         };
         worker.execute();
-    }
-
-    /** Persists correction history using the reporting layer, not the GUI. */
-    private void saveCorrectionHistoryCsv() {
-        java.nio.file.Path target = java.nio.file.Path.of("output", "correction_history.csv");
-        try {
-            new autograder.reporting.CorrectionHistoryWriter().export(target, f.studentResults);
-            f.uiState.appendLog("Saved correction history: " + target);
-        } catch (java.io.IOException ex) {
-            f.uiState.appendLog("[WARNING] Could not update correction history: " + ex.getMessage());
-            javax.swing.JOptionPane.showMessageDialog(f,
-                "Could not update correction_history.csv. Close it in Excel and try again.",
-                "Correction History Error", javax.swing.JOptionPane.WARNING_MESSAGE);
-        }
     }
 }

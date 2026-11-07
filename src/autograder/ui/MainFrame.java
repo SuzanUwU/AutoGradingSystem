@@ -114,6 +114,10 @@ public class MainFrame extends JFrame {
     // These can be displayed alongside original tester scores.
     final ArrayList<String> generatedTotals = new ArrayList<>();
 
+    // Stores latest edge-case results so they can be included in the PDF report.
+    final java.util.Map<String, autograder.grading.EdgeCaseRunner.Result> edgeCaseResults =
+        new java.util.LinkedHashMap<>();
+
     // =========================================================
     // 5. SUMMARY AND LOG COMPONENTS
     // =========================================================

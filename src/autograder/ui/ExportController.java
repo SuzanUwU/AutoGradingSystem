@@ -1,6 +1,6 @@
 package autograder.ui;
 
-import autograder.reporting.DetailedCsvExporter;
+import autograder.reporting.CsvExporter;
 import autograder.reporting.PdfReportExporter;
 import javax.swing.*;
 import java.io.File;
@@ -12,81 +12,51 @@ import java.util.Locale;
 /** ExportController responsibilities extracted from MainFrame. */
 final class ExportController {
     private final MainFrame f;
+
     ExportController(MainFrame frame) { this.f = frame; }
 
-    /** Exports detailed CSV and PDF grading reports. */
+    /** Exports official grades CSV and detailed PDF report. */
     void exportResults() {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("Save Results (CSV + PDF)");
         chooser.setSelectedFile(new File("gradedscores.csv"));
 
-        if (chooser.showSaveDialog(f)
-                != JFileChooser.APPROVE_OPTION) {
-            return;
-        }
+        if (chooser.showSaveDialog(f) != JFileChooser.APPROVE_OPTION) return;
 
-        Path csvTarget = chooser.getSelectedFile()
-                .toPath()
-                .toAbsolutePath();
+        Path csvTarget = chooser.getSelectedFile().toPath().toAbsolutePath();
+        if (!csvTarget.toString().toLowerCase(Locale.ROOT).endsWith(".csv")) csvTarget = Path.of(csvTarget + ".csv");
 
-        if (!csvTarget.toString()
-                .toLowerCase(Locale.ROOT)
-                .endsWith(".csv")) {
-
-            csvTarget = Path.of(csvTarget + ".csv");
-        }
-
-        Path pdfTarget = csvTarget.resolveSibling(
-            csvTarget.getFileName()
-                .toString()
-                .replaceFirst("(?i)\\.csv$", "_report.pdf")
-        );
+        Path pdfTarget = csvTarget.resolveSibling(csvTarget.getFileName().toString().replaceFirst("(?i)\\.csv$", "_report.pdf"));
 
         if ((Files.exists(csvTarget) || Files.exists(pdfTarget))
-                && JOptionPane.showConfirmDialog(
-                    f,
-                    "Replace existing export file(s)?\n"
-                        + csvTarget + "\n" + pdfTarget,
-                    "Replace Export",
-                    JOptionPane.YES_NO_OPTION
-                ) != JOptionPane.YES_OPTION) {
-            return;
-        }
+                && JOptionPane.showConfirmDialog(f,
+                "Replace existing export file(s)?\n" + csvTarget + "\n" + pdfTarget,
+                "Replace Export", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
 
         try {
-            // Template-free exporter for any assessment.
-            new DetailedCsvExporter().export(
-                csvTarget,
-                f.studentResults
-            );
+            // Official school-format CSV.
+            new CsvExporter().export(csvTarget, f.studentResults);
 
-            // Reuse existing PDF reporting.
+            // Detailed PDF containing grades, corrections and edge-case results.
             new PdfReportExporter().export(
-                pdfTarget,
-                f.studentResults
+                    pdfTarget,
+                    f.studentResults,
+                    f.edgeCaseResults,
+                    f.isPythonMode() ? "IS1704 - Python" : "CS102 - Java"
             );
 
             f.uiState.appendLog("Saved CSV: " + csvTarget);
             f.uiState.appendLog("Saved PDF: " + pdfTarget);
 
-            JOptionPane.showMessageDialog(
-                f,
-                "Saved:\n" + csvTarget + "\n" + pdfTarget,
-                "Export Complete",
-                JOptionPane.INFORMATION_MESSAGE
-            );
+            JOptionPane.showMessageDialog(f,
+                    "Saved:\n" + csvTarget + "\n" + pdfTarget,
+                    "Export Complete", JOptionPane.INFORMATION_MESSAGE);
 
         } catch (IOException ex) {
-
             f.uiState.appendLog("[ERROR] Export: " + ex.getMessage());
-
-            JOptionPane.showMessageDialog(
-                f,
-                "Could not export the CSV/PDF.\n"
-                    + ex.getMessage(),
-                "Export Error",
-                JOptionPane.ERROR_MESSAGE
-            );
+            JOptionPane.showMessageDialog(f,
+                    "Could not export the CSV/PDF.\n" + ex.getMessage(),
+                    "Export Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 }

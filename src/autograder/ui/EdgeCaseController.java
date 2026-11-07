@@ -2,8 +2,6 @@ package autograder.ui;
 
 import javax.swing.*;
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,6 +11,7 @@ import autograder.model.*;
 /** EdgeCaseController responsibilities extracted from MainFrame. */
 final class EdgeCaseController {
     private final MainFrame f;
+
     EdgeCaseController(MainFrame frame) { this.f = frame; }
 
     /** Runs optional edge-case tests without changing official grades. */
@@ -21,10 +20,8 @@ final class EdgeCaseController {
         File edgecases = new File("edgecases");
         File resources = new File("assessment/resources");
 
-        if (workspace == null || !workspace.isDirectory() || !edgecases.isDirectory() || !resources.isDirectory()) {
-            JOptionPane.showMessageDialog(f,
-                    "Cannot find workspace, edgecases, or assessment/resources.\nRun the application from the project folder.",
-                    "Missing Folder", JOptionPane.ERROR_MESSAGE);
+        if (!workspace.isDirectory() || !edgecases.isDirectory() || !resources.isDirectory()) {
+            JOptionPane.showMessageDialog(f, "Cannot find workspace, edgecases, or assessment/resources.\nRun the application from the project folder.", "Missing Folder", JOptionPane.ERROR_MESSAGE);
             return;
         }
 
@@ -83,7 +80,9 @@ final class EdgeCaseController {
             protected void done() {
                 try {
                     List<EdgeCaseRunner.Result> results = get();
-                    saveEdgeCaseResultsCsv(results);
+
+                    f.edgeCaseResults.clear();
+                    for (EdgeCaseRunner.Result result : results) f.edgeCaseResults.put(result.getUsername(), result);
 
                     int passed = results.stream().mapToInt(EdgeCaseRunner.Result::getPassed).sum();
                     int total = results.stream().mapToInt(EdgeCaseRunner.Result::getTotal).sum();
@@ -93,16 +92,15 @@ final class EdgeCaseController {
 
                     JOptionPane.showMessageDialog(f,
                             "Edge-case testing finished.\nPassed: " + passed + " / " + total
-                                    + "\nSaved: output\\edge_case_results.csv"
-                                    + "\n\nOfficial grading scores were not changed.",
+                                    + "\n\nResults will be included in the PDF report."
+                                    + "\nOfficial grading scores were not changed.",
                             "Edge Cases Complete", JOptionPane.INFORMATION_MESSAGE);
+
                 } catch (Exception ex) {
                     f.progressBar.setString("Edge-case testing could not complete");
                     f.uiState.appendLog("[ERROR] Edge cases: " + ex);
 
-                    JOptionPane.showMessageDialog(f,
-                            "Edge-case testing could not complete. Check the System Log.",
-                            "Edge Case Error", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(f, "Edge-case testing could not complete. Check the System Log.", "Edge Case Error", JOptionPane.ERROR_MESSAGE);
                 } finally {
                     f.uiState.setControlsEnabled(true);
                 }
@@ -110,13 +108,6 @@ final class EdgeCaseController {
         };
 
         worker.execute();
-    }
-
-    /** Exports diagnostic results without changing official grades. */
-    private void saveEdgeCaseResultsCsv(List<EdgeCaseRunner.Result> results) throws IOException {
-        new autograder.reporting.EdgeCaseReportWriter().export(
-                Path.of("output", "edge_case_results.csv"), results);
-        f.uiState.appendLog("Saved edge-case results: output/edge_case_results.csv");
     }
 
     static class EdgeCaseUpdate {
