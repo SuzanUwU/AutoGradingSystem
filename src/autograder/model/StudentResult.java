@@ -14,6 +14,8 @@ public class StudentResult {
     private final Map<String, String> comments = new LinkedHashMap<>();
     private String gradingError = "";
     private String identityWarning = "";
+    private boolean reviewResolved;
+    private String reviewNote = "";
     private boolean graded;
 
     public StudentResult(SubmissionResult submission) { this.submission = submission; }
@@ -23,6 +25,28 @@ public class StudentResult {
     public void setIdentityWarning(String warning) { identityWarning = warning; }
     public String getIdentityWarning() { return identityWarning; }
     public String getGradingError() { return gradingError; }
+
+    public boolean isReviewResolved() { return reviewResolved; }
+
+    public String getReviewNote() { return reviewNote; }
+
+    public void resolveReview(String note) {
+        if (!"Review".equals(submission.getOverallStatus())) {
+            throw new IllegalStateException("This submission is not flagged for review.");
+        }
+
+        if (note == null || note.trim().isEmpty()) {
+            throw new IllegalArgumentException("Enter a note explaining the review decision.");
+        }
+
+        reviewResolved = true;
+        reviewNote = note.trim();
+    }
+
+    public void reopenReview() {
+        reviewResolved = false;
+        reviewNote = "";
+    }
 
     public void setGradingResults(List<QuestionResult> results, String error) {
         questions.clear();
@@ -62,9 +86,11 @@ public class StudentResult {
     public double getMaximum() { return questions.stream().mapToDouble(QuestionResult::getMaxScore).sum(); }
     public boolean hasManualScores() { return !manualScores.isEmpty(); }
     public boolean needsAttention() {
-        return "Review".equals(submission.getOverallStatus())
-                || "Failed".equals(submission.getOverallStatus()) || !identityWarning.isEmpty()
-                || !gradingError.isEmpty() || questions.stream()
+        return ("Review".equals(submission.getOverallStatus()) && !reviewResolved)
+                || "Failed".equals(submission.getOverallStatus())
+                || !identityWarning.isEmpty()
+                || !gradingError.isEmpty()
+                || questions.stream()
                 .anyMatch(q -> !"Graded successfully".equals(q.getStatusMessage()));
     }
     public String getGradingStatus() {
@@ -75,6 +101,17 @@ public class StudentResult {
     public String getDetails() {
         StringBuilder text = new StringBuilder(submission.getDetails());
         if (!identityWarning.isEmpty()) text.append("\nIDENTITY WARNING\n").append(identityWarning).append('\n');
+        if ("Review".equals(submission.getOverallStatus())) {
+            text.append("\nINSTRUCTOR REVIEW\n")
+                    .append(reviewResolved ? "Resolved" : "Pending")
+                    .append('\n');
+
+            if (!reviewNote.isEmpty()) {
+                text.append("Note: ")
+                        .append(reviewNote)
+                        .append('\n');
+            }
+        }
         text.append("\nGRADING\n").append(getGradingStatus()).append('\n');
         if (!gradingError.isEmpty()) text.append(gradingError).append('\n');
         for (QuestionResult q : questions) {

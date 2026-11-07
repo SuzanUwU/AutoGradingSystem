@@ -52,6 +52,7 @@ final class MainFrameActions {
         f.generateTestersButton.addActionListener(e -> f.testers.generateTesters());
         f.gradeGeneratedButton.addActionListener(e -> f.javaGrading.startGrading(new File("generated_testers"), "Generated testers", true));
         f.edgeCaseButton.addActionListener(e -> f.edgeCases.runEdgeCases());
+        f.reviewButton.addActionListener(e -> f.review.reviewSubmission());
         f.manualButton.addActionListener(e -> f.manualScore.enterManualScore());
         f.exportButton.addActionListener(e -> f.export.exportResults());
     }

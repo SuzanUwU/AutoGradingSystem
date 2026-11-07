@@ -244,6 +244,7 @@ final class MainFrameLayout {
 
         otherActions.add(f.edgeCaseButton);
         otherActions.add(f.exportButton);
+        otherActions.add(f.reviewButton);
         otherActions.add(f.manualButton);
 
         gbc.gridy = 3;
@@ -255,6 +256,7 @@ final class MainFrameLayout {
         // the necessary validation/grading steps.
         //
         // Other controllers can enable them later.
+        f.reviewButton.setEnabled(false);
         f.manualButton.setEnabled(false);
         f.gradeOriginalButton.setEnabled(false);
         f.generateTestersButton.setEnabled(false);

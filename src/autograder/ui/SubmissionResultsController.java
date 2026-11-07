@@ -49,6 +49,7 @@ final class SubmissionResultsController {
         int viewRow = f.resultTable.getSelectedRow();
 
         if (viewRow < 0) {
+            f.reviewButton.setEnabled(false);
             f.manualButton.setEnabled(false);
             f.detailsArea.setText("Select a student to view submission details.");
             f.correctionDetailArea.setText("Select a student to see exact correction files and anomalies.");
@@ -73,7 +74,17 @@ final class SubmissionResultsController {
         f.detailsArea.setText(details);
         showCorrectionSummary(student.getSubmission());
         selectCorrectionRow(student.getSubmission().getUsername());
-        f.manualButton.setEnabled(!f.busy && !student.getQuestions().isEmpty());
+        f.reviewButton.setEnabled(
+                !f.busy
+                && "Review".equals(
+                        student.getSubmission().getOverallStatus()
+                )
+        );
+
+        f.manualButton.setEnabled(
+                !f.busy
+                && !student.getQuestions().isEmpty()
+        );
         f.detailsArea.setCaretPosition(0);
     }
 

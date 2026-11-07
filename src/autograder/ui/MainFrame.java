@@ -82,6 +82,9 @@ public class MainFrame extends JFrame {
     // Exports grading results.
     final JButton exportButton = new JButton("Export Results");
 
+    // Allows professor to resolve submissions flagged for review.
+    final JButton reviewButton = new JButton("Review Submission");
+
     // Allows manual score adjustments.
     final JButton manualButton = new JButton("Manual Score (Optional)");
 
@@ -210,6 +213,9 @@ public class MainFrame extends JFrame {
 
     // Handles Java grading actions.
     final JavaGradingController javaGrading = new JavaGradingController(this);
+
+    // Handles professor review decisions.
+    final ReviewController review = new ReviewController(this);
 
     // Handles manual score adjustments.
     final ManualScoreController manualScore = new ManualScoreController(this);
