@@ -18,10 +18,10 @@ final class EdgeCaseController {
     void runEdgeCases() {
         File workspace = new File("workspace");
         File edgecases = new File("edgecases");
-        File resources = new File("assessment/resources");
+        File resources = new File("assessment/java/resources");
 
         if (!workspace.isDirectory() || !edgecases.isDirectory() || !resources.isDirectory()) {
-            JOptionPane.showMessageDialog(f, "Cannot find workspace, edgecases, or assessment/resources.\nRun the application from the project folder.", "Missing Folder", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(f, "Cannot find workspace, edgecases, or assessment/java/resources.\nRun the application from the project folder.", "Missing Folder", JOptionPane.ERROR_MESSAGE);
             return;
         }
 

@@ -17,7 +17,7 @@ final class JavaGradingController {
     /** Grades Java submissions using the selected tester set. */
     void startGrading(File testers, String testerLabel, boolean generatedMode) {
         File workspace = new File("workspace");
-        File resources = new File("assessment/resources");
+        File resources = new File("assessment/java/resources");
 
         if (workspace == null
                 || !workspace.isDirectory()
@@ -25,7 +25,7 @@ final class JavaGradingController {
                 || !resources.isDirectory()) {
 
             JOptionPane.showMessageDialog(f,
-                    "Cannot find workspace, tester folder, or assessment/resources.\n"
+                    "Cannot find workspace, tester folder, or assessment/java/resources.\n"
                             + "Tester folder: " + testers.getPath() + "\n"
                             + "Run the application from the project folder.",
                     "Missing Folder",

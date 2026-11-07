@@ -27,7 +27,7 @@ final class PythonGradingController {
     /** Starts grading the currently validated Python submissions. */
     void startPythonGrading() {
         File submissions = new File(f.submissionsField.getText().trim());
-        File assessment = new File("assessment/is1704");
+        File assessment = new File("assessment/python");
 
         // STEP 1: Check required folders and assessment files.
         if (!submissions.isDirectory()

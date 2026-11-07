@@ -29,8 +29,8 @@ public class WorkspaceManager {
 
     /**
      * @param gradingRoot     folder under which per-student, per-question workspaces are created
-     * @param testersFolder   folder holding the trusted tester sources, e.g. assessment/testers
-     * @param resourcesFolder folder holding trusted resources per question folder, e.g. assessment/resources/Q2
+     * @param testersFolder   folder holding the trusted tester sources, e.g. assessment/java/testers
+     * @param resourcesFolder folder holding trusted resources per question folder, e.g. assessment/java/resources/Q2
      */
     public WorkspaceManager(File gradingRoot, File testersFolder, File resourcesFolder) {
         this.gradingRoot = gradingRoot;

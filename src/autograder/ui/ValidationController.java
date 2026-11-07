@@ -50,7 +50,7 @@ final class ValidationController {
 
         PythonValidationService pythonService =
                 new PythonValidationService(
-                        new File("assessment/is1704/template")
+                        new File("assessment/python/template")
                 );
 
         SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {

@@ -39,13 +39,13 @@ final class MainFrameActions {
         f.correctionTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) f.results.showSelectedCorrection();
         });
-        // gradeOriginalButton.addActionListener(e -> startGrading(new File("assessment/testers"), "Original testers", false));
+        // gradeOriginalButton.addActionListener(e -> startGrading(new File("assessment/java/testers"), "Original testers", false));
         f.gradeOriginalButton.addActionListener(e -> {
             if (f.isPythonMode()) {
                 f.pythonGrading.startPythonGrading();
             } else {
                 f.javaGrading.startGrading(
-                    new File("assessment/testers"),
+                    new File("assessment/java/testers"),
                     "Original testers",
                     false
                 );
