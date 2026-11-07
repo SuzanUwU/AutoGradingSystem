@@ -43,62 +43,9 @@ public class CsvExporter {
         maximumColumn = 6;
         endOfLineColumn = 7;
     }
-
-    public CsvExporter(Path template) throws IOException {
-        rows = parse(Files.readString(template, StandardCharsets.UTF_8));
-        if (rows.isEmpty()) throw new IOException("The scoresheet is empty.");
-        List<String> header = rows.get(0);
-        orgDefinedIdColumn = column(header, "OrgDefinedId");
-        emailColumn = column(header, "Email");
-        endOfLineColumn = column(header, "End-of-Line Indicator");
-        usernameColumn = column(header, "Username");
-        scoreColumn = column(header, "Calculated Final Grade Numerator");
-        maximumColumn = column(header, "Calculated Final Grade Denominator");
-        firstNameColumn = column(header, "First Name");
-        lastNameColumn = column(header, "Last Name");
-        Set<String> seen = new HashSet<>();
-        for (int i = 1; i < rows.size(); i++) {
-            if (rows.get(i).size() != header.size()) throw new IOException("Invalid scoresheet row " + (i + 1));
-            if (!seen.add(username(rows.get(i).get(usernameColumn)))) throw new IOException("Duplicate username in scoresheet.");
-        }
-    }
-    private static int column(List<String> header, String name) throws IOException {
-        int index = header.indexOf(name);
-        if (index < 0) throw new IOException("Scoresheet is missing column: " + name);
-        return index;
-    }
-
-    // scoresheet username "#ping.lee.2023" -> "ping.lee.2023" for matching
-    private static String username(String value) {
-        return value.replaceFirst("^#", "").trim().toLowerCase(Locale.ROOT);
-    }
-
-        public Map<String, String> getRosterNames() {
-        Map<String, String> names = new LinkedHashMap<>();
-        for (int i = 1; i < rows.size(); i++) {
-            List<String> row = rows.get(i);
-            names.put(username(row.get(usernameColumn)),
-                    (row.get(firstNameColumn) + " " + row.get(lastNameColumn).replace("_", "")).trim());
-        }
-        return names;
-    }
     
-    // generate new id for new students
-    private String nextOrgDefinedId() throws IOException {
-        long maxId = -1;
-        for (int i = 1; i < rows.size(); i++) {
-            String value = rows.get(i).get(orgDefinedIdColumn).trim().replaceFirst("^#", "");
-            try {
-                maxId = Math.max(maxId, Long.parseLong(value));
-            } catch (NumberFormatException e) {
-                throw new IOException("Invalid OrgDefinedId in scoresheet row " + (i + 1));
-            }
-        }
-        if (maxId < 0) {
-            if (rows.size() == 1) return "#00000001";
-            throw new IOException("No existing OrgDefinedId found in scoresheet.");
-        }
-        return "#" + String.format(Locale.ROOT, "%08d", maxId + 1);
+    private String nextOrgDefinedId(int studentNumber) {
+        return "#" + String.format(Locale.ROOT, "%08d", studentNumber);
     }
 
     // username
@@ -113,22 +60,6 @@ public class CsvExporter {
 
         return "#" + username;
     }
-
-    // split existing fullname in template to 2 parts
-    private String[] splitFullName(String fullName) {
-        if (fullName == null || fullName.isBlank()) {
-            return new String[] {"", ""};
-        }
-        String [] parts = fullName.trim().split("\\s+", 2);
-        String firstName = parts[0].toUpperCase();
-        String lastName = "-";
-        if (parts.length > 1) {
-            lastName = parts[1].toUpperCase();
-        }
-
-        return new String[] {firstName, lastName};
-    }
-
 
     // split username to first and last name
     private String[] fullname(String username) {
@@ -194,7 +125,15 @@ public class CsvExporter {
         Map<String, StudentResult> byUsername = new LinkedHashMap<>();
 
         for (StudentResult result : results) {
-            String name = username(result.getSubmission().getUsername());
+            if (result == null || result.getSubmission() == null) {
+                throw new IOException("Invalid student result.");
+            }
+
+            String name = result.getSubmission().getUsername();
+
+            if (name == null || name.isBlank()) {
+                throw new IOException("Student username cannot be empty.");
+            }
 
             if (byUsername.put(name, result) != null) {
                 throw new IOException("Duplicate submission username: " + name);
@@ -204,74 +143,21 @@ public class CsvExporter {
         List<List<String>> output = new ArrayList<>();
         output.add(new ArrayList<>(rows.get(0)));
 
-        Set<String> matched = new HashSet<>();
-
-        // keep existing template rows and update their scores
-        for (int i = 1; i < rows.size(); i++) {
-            List<String> row = new ArrayList<>(rows.get(i));
-            String name = username(row.get(usernameColumn));
-
-            StudentResult result = byUsername.get(name);
-
-            if (result != null) {
-                matched.add(name);
-                if (result.getQuestions().isEmpty()) {
-                    row.set(scoreColumn, "");
-                } else {
-                    double maximum;
-
-                    try {
-                        maximum = Double.parseDouble(row.get(maximumColumn));
-                    } catch (NumberFormatException ex) {
-                        throw new IOException("Invalid denominator for " + row.get(usernameColumn)
-                        );
-                    }
-
-                    if (maximum != result.getMaximum()) {
-                        throw new IOException("Scoresheet denominator differs from grading maximum for " + row.get(usernameColumn));
-                    }
-                    row.set(scoreColumn, Double.toString(result.getTotal()));
-
-                    // Split the existing full name if the last-name column is blank.
-                    String existingLast = row.get(lastNameColumn).trim();
-                    String existingFirst = row.get(firstNameColumn).trim();
-                    boolean hasNoLastName = existingLast.isBlank() || existingLast.equals("_");
-                    boolean hasFirstName = !existingFirst.isBlank() && !existingFirst.equals("_");
-
-                    if (hasNoLastName && hasFirstName) {
-                        String[] names = splitFullName(existingFirst);
-                        row.set(firstNameColumn, names[0]);
-                        row.set(lastNameColumn, names[1]);
-                    }
-                }
-            }
-            output.add(row);
-        }
-
-        // add students who are not already in the template
-        String nextId = nextOrgDefinedId();
+        int studentNumber = 1;
         for (Map.Entry<String, StudentResult> entry : byUsername.entrySet()) {
-            String name = entry.getKey();
+            String username = entry.getKey();
             StudentResult result = entry.getValue();
-
-            if (matched.contains(name)) {
-                continue;
-            }
 
             List<String> row = new ArrayList<>(java.util.Collections.nCopies(rows.get(0).size(), ""));
 
-            String[] names = fullname(name);
+            // generate student ID and format details
+            String[] names = fullname(username);
 
-            row.set(orgDefinedIdColumn, nextId);
-            long idNumber = Long.parseLong(nextId.substring(1));
-            nextId = "#" + String.format(Locale.ROOT, "%08d", idNumber + 1);
-
-            String emailUsername = name.trim().replaceFirst("^#", "");
-
-            row.set(usernameColumn, formatUsername(name));
+            row.set(orgDefinedIdColumn, nextOrgDefinedId(studentNumber));
+            row.set(usernameColumn, formatUsername(username));
             row.set(lastNameColumn, names[1].isBlank() ? "-" : names[1]);
             row.set(firstNameColumn, names[0]);
-            row.set(emailColumn, emailUsername + "@computing.smu.edu.sg");
+            row.set(emailColumn, username + "@computing.smu.edu.sg");
             row.set(maximumColumn, result.getQuestions().isEmpty()
                     ? "" : Double.toString(result.getMaximum()));
             row.set(endOfLineColumn, "#");
@@ -282,6 +168,7 @@ public class CsvExporter {
                 row.set(scoreColumn, Double.toString(result.getTotal()));
             }
             output.add(row);
+            studentNumber++;
         }
         return encode(output);
     }
@@ -302,28 +189,5 @@ public class CsvExporter {
         }
 
         Files.writeString(scoresFile, scoresCsv, StandardCharsets.UTF_8);
-    }
-
-    // handle quoted commas, escaped quotes, multiline fields and UTF-8 BOM. */
-    private static List<List<String>> parse(String text) throws IOException {
-        if (text.startsWith("﻿")) text = text.substring(1);
-        List<List<String>> records = new ArrayList<>();
-        List<String> row = new ArrayList<>();
-        StringBuilder field = new StringBuilder();
-        boolean quoted = false;
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            if (c == '"') {
-                if (quoted && i + 1 < text.length() && text.charAt(i + 1) == '"') { field.append('"'); i++; }
-                else quoted = !quoted;
-            } else if (c == ',' && !quoted) { row.add(field.toString()); field.setLength(0); }
-            else if ((c == '\r' || c == '\n') && !quoted) {
-                if (c == '\r' && i + 1 < text.length() && text.charAt(i + 1) == '\n') i++;
-                row.add(field.toString()); records.add(row); row = new ArrayList<>(); field.setLength(0);
-            } else field.append(c);
-        }
-        if (quoted) throw new IOException("Unclosed quoted field in scoresheet.");
-        if (field.length() > 0 || !row.isEmpty()) { row.add(field.toString()); records.add(row); }
-        return records;
     }
 }
