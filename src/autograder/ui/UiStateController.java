@@ -68,9 +68,7 @@ final class UiStateController {
                 student -> !student.getQuestions().isEmpty()
             )
         );
-        // Lab 7 is available in Python mode without running strict lab-test validation.
-        f.lab7Button.setVisible(f.isPythonMode());
-        f.lab7Button.setEnabled(enabled && f.isPythonMode());
+
         //====================
         f.results.showSelectedStudent();
     }

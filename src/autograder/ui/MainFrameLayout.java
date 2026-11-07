@@ -248,9 +248,6 @@ final class MainFrameLayout {
         otherActions.add(f.exportButton);
         otherActions.add(f.manualButton);
 
-        // Existing Lab 7 checker button.
-        otherActions.add(f.lab7Button);
-
         gbc.gridy = 3;
         setupPanel.add(otherActions, gbc);
 
@@ -266,10 +263,6 @@ final class MainFrameLayout {
         f.gradeGeneratedButton.setEnabled(false);
         f.edgeCaseButton.setEnabled(false);
         f.exportButton.setEnabled(false);
-
-        // Lab 7 is initially hidden and disabled.
-        f.lab7Button.setVisible(false);
-        f.lab7Button.setEnabled(false);
 
         // Put setup controls at the top of the container.
         container.add(setupPanel, BorderLayout.NORTH);

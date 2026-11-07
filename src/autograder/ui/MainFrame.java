@@ -93,9 +93,6 @@ public class MainFrame extends JFrame {
     // Allows manual score adjustments.
     final JButton manualButton = new JButton("Manual Score (Optional)");
 
-    // Opens the separate Lab 7 checker feature.
-    final JButton lab7Button = new JButton("Lab 7");
-
     // =========================================================
     // 4. APPLICATION STATE
     // =========================================================
@@ -210,16 +207,16 @@ public class MainFrame extends JFrame {
             new EdgeCaseController(this);
 
     // Handles tester generation and availability checks.
-    final TesterActions testers =
-            new TesterActions(this);
+    final TesterActionsController testers =
+            new TesterActionsController(this);
 
     // Handles Python grading actions.
-    final PythonGradingActions pythonGrading =
-            new PythonGradingActions(this);
+    final PythonGradingController pythonGrading =
+            new PythonGradingController(this);
 
     // Handles Java grading actions.
-    final JavaGradingActions javaGrading =
-            new JavaGradingActions(this);
+    final JavaGradingController javaGrading =
+            new JavaGradingController(this);
 
     // Handles manual score adjustments.
     final ManualScoreController manualScore =
