@@ -119,13 +119,60 @@ public class WorkspaceManager {
     // Delete children before parents, then recreate an empty workspace directory.
     private void resetDirectory(File directory) throws IOException {
         Path path = directory.toPath();
+
         if (Files.exists(path)) {
             try (Stream<Path> paths = Files.walk(path)) {
                 List<Path> sorted = new ArrayList<>();
                 paths.sorted(Comparator.reverseOrder()).forEach(sorted::add);
-                for (Path entry : sorted) Files.delete(entry);
+
+                for (Path entry : sorted) {
+                    deleteWithRetry(entry);
+                }
             }
         }
+
         Files.createDirectories(path);
+    }
+
+    // Windows/OneDrive may keep recently compiled files locked for a short time.
+    // Retry cleanup so a second grading run does not fail just because a file
+    // has not been released yet.
+    private void deleteWithRetry(Path path) throws IOException {
+        final int maxAttempts = 20;
+        final long waitMillis = 100;
+        IOException lastException = null;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                File file = path.toFile();
+
+                if (file.exists() && !file.canWrite()) {
+                    file.setWritable(true);
+                }
+
+                Files.deleteIfExists(path);
+                return;
+
+            } catch (IOException e) {
+                lastException = e;
+
+                if (attempt < maxAttempts) {
+                    try {
+                        Thread.sleep(waitMillis);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException(
+                                "Workspace cleanup interrupted: " + path,
+                                interrupted
+                        );
+                    }
+                }
+            }
+        }
+
+        throw new IOException(
+                "Cannot delete grading workspace file after retries: " + path,
+                lastException
+        );
     }
 }
