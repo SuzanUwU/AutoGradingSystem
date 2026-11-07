@@ -1,10 +1,5 @@
 package autograder.grading;
 
-/**
- * Project scaffold only. TODO: Agree on this class's responsibilities and public
- * methods with the team before adding implementation.
- */
-
 import autograder.execution.ProgramExecutor;
 import autograder.model.ExecutionResult;
 
@@ -19,9 +14,6 @@ public class TestCaseRunner {
         this.executor = executor;
     }
 
-    /**
-     * Executes a tester class safely using Person 3's ProgramExecutor.
-     */
     public ExecutionResult runTestSafely(File workingDir, String mainClass) {
         return runTestSafely(workingDir, mainClass, Collections.emptyList());
     }

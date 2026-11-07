@@ -18,9 +18,11 @@ import java.util.List;
  * cause Q1a to fail. Trusted .class dependencies (e.g. Shape.class) are found through {@code -cp .}.
  */
 public class JavaCompilerService {
+    // Constants keep compiler output checks and source encoding consistent.
     private static final String CLASS_EXTENSION = ".class";
     private static final String SOURCE_ENCODING = "UTF-8";
 
+    // Dependencies used to launch javac as a separate, time-limited process.
     private final String javacExecutable;
     private final long timeoutSeconds;
     private final ProcessRunner processRunner;
@@ -35,6 +37,7 @@ public class JavaCompilerService {
         this(JdkTools.find("javac"), timeoutSeconds, new ProcessRunner(maxOutputBytes));
     }
 
+    // Alternate constructor allows the compiler executable and process runner to be supplied.
     public JavaCompilerService(String javacExecutable, long timeoutSeconds, ProcessRunner processRunner) {
         this.javacExecutable = javacExecutable;
         this.timeoutSeconds = timeoutSeconds;
@@ -46,14 +49,18 @@ public class JavaCompilerService {
      * Never throws: every failure is described by the returned result.
      */
     public CompilationResult compile(QuestionWorkspace workspace, QuestionSpec question) {
+        // Do not attempt compilation when a required student source file is missing.
         if (!workspace.isReady()) return CompilationResult.missingSources(workspace.getMissingSources());
 
         File directory = workspace.getDirectory();
+        // Run javac inside the isolated question folder, not in the original submission.
         ExecutionResult javac = processRunner.run(buildCommand(question.getTesterSourceFile()), directory, timeoutSeconds);
         String output = combineOutput(javac);
 
+        // Translate process outcomes into a consistent CompilationResult for the grader.
         switch (javac.getStatus()) {
             case COMPLETED:
+                // A normal process exit is only considered successful if the tester .class exists.
                 File testerClass = new File(directory, question.getTesterClassName() + CLASS_EXTENSION);
                 if (testerClass.isFile()) return CompilationResult.success(output);
                 return CompilationResult.systemError("javac exited normally but did not produce " + testerClass.getName());
@@ -65,6 +72,7 @@ public class JavaCompilerService {
         }
     }
 
+    // Build a command that compiles the tester and only student sources it references.
     private List<String> buildCommand(String testerSourceFile) {
         List<String> command = new ArrayList<>();
         command.add(javacExecutable);
@@ -75,8 +83,10 @@ public class JavaCompilerService {
         command.add("-J-Dstdout.encoding=" + SOURCE_ENCODING);
         command.add("-J-Dstderr.encoding=" + SOURCE_ENCODING);
         command.add("-nowarn");
+        // Resolve dependent .java sources from the current workspace.
         command.add("-sourcepath");
         command.add(".");
+        // Find trusted precompiled dependencies in the same workspace.
         command.add("-cp");
         command.add(".");
         command.add("-d");
@@ -85,6 +95,7 @@ public class JavaCompilerService {
         return command;
     }
 
+    // Merge standard output and error output for readable compilation feedback.
     private String combineOutput(ExecutionResult javac) {
         String stdout = javac.getStdout().trim();
         String stderr = javac.getStderr().trim();

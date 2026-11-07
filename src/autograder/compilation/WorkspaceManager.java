@@ -22,6 +22,7 @@ import java.util.stream.Stream;
 public class WorkspaceManager {
     private static final String JAVA_EXTENSION = ".java";
 
+    // Base directories for generated workspaces and trusted assessment inputs.
     private final File gradingRoot;
     private final File testersFolder;
     private final File resourcesFolder;
@@ -47,14 +48,19 @@ public class WorkspaceManager {
      * @throws IOException if the workspace cannot be written or the trusted tester is missing
      */
     public QuestionWorkspace prepare(File studentRoot, String username, QuestionSpec question) throws IOException {
+        // Give each student and question part its own clean compilation directory.
         File directory = resolveWorkspaceDirectory(username, question.getQuestionId());
+        // Remove files from previous runs so stale output cannot affect this attempt.
         resetDirectory(directory);
 
+        // Copy student .java files first; trusted resources and tester are copied afterward.
         File studentFolder = findChildFolder(studentRoot, question.getFolderName());
         if (studentFolder != null) copyStudentSources(studentFolder, directory);
+        // Trusted files can replace same-named student files.
         copyTrustedResources(new File(resourcesFolder, question.getFolderName()), directory);
         copyTester(question, directory);
 
+        // Record absent required sources rather than attempting compilation immediately.
         List<String> missingSources = new ArrayList<>();
         for (String source : question.getRequiredSources()) {
             if (!new File(directory, source).isFile()) missingSources.add(source);
@@ -62,6 +68,7 @@ public class WorkspaceManager {
         return new QuestionWorkspace(username, question.getQuestionId(), directory, missingSources);
     }
 
+    // Reject student/question paths that would escape the grading root.
     private File resolveWorkspaceDirectory(String username, String questionId) throws IOException {
         File directory = new File(new File(gradingRoot, username), questionId);
         String rootPath = gradingRoot.getCanonicalPath() + File.separator;
@@ -71,12 +78,14 @@ public class WorkspaceManager {
         return directory;
     }
 
+    // Copy source code only: never reuse student-supplied compiled .class files.
     private void copyStudentSources(File studentFolder, File directory) throws IOException {
         File[] files = studentFolder.listFiles(file -> file.isFile() && file.getName().endsWith(JAVA_EXTENSION));
         if (files == null) return;
         for (File file : files) copyInto(file, directory);
     }
 
+    // Include assessment-provided dependencies, such as trusted classes or resources.
     private void copyTrustedResources(File trustedFolder, File directory) throws IOException {
         File[] files = trustedFolder.listFiles(file -> file.isFile() && !file.isHidden());
         if (files == null) return;
@@ -85,12 +94,14 @@ public class WorkspaceManager {
         }
     }
 
+    // The instructor-provided tester is required for this question.
     private void copyTester(QuestionSpec question, File directory) throws IOException {
         File tester = new File(testersFolder, question.getTesterSourceFile());
         if (!tester.isFile()) throw new IOException("Tester file not found: " + tester.getPath());
         copyInto(tester, directory);
     }
 
+    // Match question folders without requiring exact capitalization.
     private File findChildFolder(File parent, String folderName) {
         File[] folders = parent.listFiles(File::isDirectory);
         if (folders == null) return null;
@@ -100,10 +111,12 @@ public class WorkspaceManager {
         return null;
     }
 
+    // Replace same-named destination files; copy order gives trusted inputs precedence.
     private void copyInto(File file, File directory) throws IOException {
         Files.copy(file.toPath(), new File(directory, file.getName()).toPath(), StandardCopyOption.REPLACE_EXISTING);
     }
 
+    // Delete children before parents, then recreate an empty workspace directory.
     private void resetDirectory(File directory) throws IOException {
         Path path = directory.toPath();
         if (Files.exists(path)) {

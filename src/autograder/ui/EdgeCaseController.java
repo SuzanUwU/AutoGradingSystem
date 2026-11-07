@@ -6,8 +6,9 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+
+import autograder.grading.EdgeCaseRunner;
 import autograder.model.*;
-import autograder.EdgeCaseRunner;
 
 /** EdgeCaseController responsibilities extracted from MainFrame. */
 final class EdgeCaseController {

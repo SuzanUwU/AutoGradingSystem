@@ -11,6 +11,7 @@ import java.util.List;
  */
 
 public class QuestionWorkspace {
+    // Immutable description of one student/question workspace.
     private final String username;
     private final String questionId;
     private final File directory;
@@ -20,9 +21,11 @@ public class QuestionWorkspace {
         this.username = username;
         this.questionId = questionId;
         this.directory = directory;
+        // Defensive copy: callers cannot change the recorded missing-file list later.
         this.missingSources = Collections.unmodifiableList(new ArrayList<>(missingSources));
     }
 
+    // Accessors let the compiler and grader read workspace metadata.
     public String getUsername() {
         return username;
     }
@@ -39,6 +42,7 @@ public class QuestionWorkspace {
         return missingSources;
     }
 
+    // Readiness means all required source files exist; it does not mean they compile.
     /** Returns true when every required student source is present, so compilation can proceed. */
     public boolean isReady() {
         return missingSources.isEmpty();

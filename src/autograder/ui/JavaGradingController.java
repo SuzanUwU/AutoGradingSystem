@@ -10,9 +10,9 @@ import autograder.model.*;
 
 
 /** JavaGradingActions responsibilities extracted from MainFrame. */
-final class JavaGradingActions {
+final class JavaGradingController {
     private final MainFrame f;
-    JavaGradingActions(MainFrame frame) { this.f = frame; }
+    JavaGradingController(MainFrame frame) { this.f = frame; }
 
     /** Grades Java submissions using the selected tester set. */
     void startGrading(File testers, String testerLabel, boolean generatedMode) {

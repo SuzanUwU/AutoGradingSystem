@@ -1,4 +1,4 @@
-package autograder;
+package autograder.grading;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;

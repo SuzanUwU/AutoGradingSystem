@@ -7,9 +7,9 @@ import java.io.IOException;
 
 
 /** TesterActions responsibilities extracted from MainFrame. */
-final class TesterActions {
+final class TesterActionsController {
     private final MainFrame f;
-    TesterActions(MainFrame frame) { this.f = frame; }
+    TesterActionsController(MainFrame frame) { this.f = frame; }
 
     /** Handles generate testers. */
     void generateTesters() {

@@ -1,4 +1,4 @@
-package autograder.ui;
+package autograder.grading;
 
 import java.io.*;
 import java.nio.file.*;

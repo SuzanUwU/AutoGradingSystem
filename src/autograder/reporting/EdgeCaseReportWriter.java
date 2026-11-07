@@ -1,12 +1,13 @@
 package autograder.reporting;
 
-import autograder.EdgeCaseRunner;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+
+import autograder.grading.EdgeCaseRunner;
 
 /** Exports optional edge-case diagnostics separately from official marks. */
 public final class EdgeCaseReportWriter {
