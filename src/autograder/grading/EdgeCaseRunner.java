@@ -1,15 +1,35 @@
 package autograder.grading;
 
+import autograder.compilation.JavaCompilerService;
+import autograder.compilation.QuestionWorkspace;
+import autograder.compilation.WorkspaceManager;
+import autograder.execution.ProgramExecutor;
+import autograder.model.CompilationResult;
+import autograder.model.ExecutionResult;
+import autograder.model.QuestionSpec;
+
 import java.io.*;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
+/**
+ * Runs the optional edge-case testers (edgecases/QxxEdgeCase.java) against one student.
+ *
+ * <p>Workspace preparation, compilation and execution reuse the main grading pipeline
+ * ({@link WorkspaceManager}, {@link JavaCompilerService}, {@link ProgramExecutor}); only the
+ * edge-case specifics live here: the extra data files, and counting "PASSED" lines instead of
+ * the official score format. Results never touch official grades.
+ */
 public class EdgeCaseRunner {
+    private static final long COMPILE_TIMEOUT_SECONDS = 10;
+    private static final long RUN_TIMEOUT_SECONDS = 8;
+    private static final int MAX_OUTPUT_BYTES = 1_000_000;
+
     private final File edgeFolder;
     private final File resourcesFolder;
+    private final JavaCompilerService compiler = new JavaCompilerService(COMPILE_TIMEOUT_SECONDS, MAX_OUTPUT_BYTES);
+    private final ProgramExecutor executor = new ProgramExecutor(RUN_TIMEOUT_SECONDS, MAX_OUTPUT_BYTES, List.of());
 
     public EdgeCaseRunner(File edgeFolder, File resourcesFolder) {
         this.edgeFolder = edgeFolder;
@@ -22,17 +42,20 @@ public class EdgeCaseRunner {
 
         try {
             temp = Files.createTempDirectory("cs102-edge-" + safe(username) + "-");
+            // Edge-case testers are the "testers" here, so the official WorkspaceManager places them.
+            WorkspaceManager workspaces = new WorkspaceManager(temp.toFile(), edgeFolder, resourcesFolder);
 
-            results.put("Q1a", runQuestion(studentRoot, temp, "Q1a", "Q1", "Q1aEdgeCase",
-                    List.of("Q1a.java"), List.of(), 7, false));
-            results.put("Q1b", runQuestion(studentRoot, temp, "Q1b", "Q1", "Q1bEdgeCase",
-                    List.of("Q1b.java"), List.of(), 9, false));
-            results.put("Q2a", runQuestion(studentRoot, temp, "Q2a", "Q2", "Q2aEdgeCase",
-                    List.of("Q2a.java"), List.of("personsEdgeCase.txt"), 7, false));
-            results.put("Q2b", runQuestion(studentRoot, temp, "Q2b", "Q2", "Q2bEdgeCase",
-                    List.of("Q2b.java"), List.of("studentsEdgeCase.txt"), 6, false));
-            results.put("Q3", runQuestion(studentRoot, temp, "Q3", "Q3", "Q3EdgeCase",
-                    List.of(), List.of(), 16, true));
+            results.put("Q1a", runQuestion(workspaces, studentRoot, username,
+                    new QuestionSpec("Q1a", "Q1", "Q1aEdgeCase", List.of("Q1a.java")), List.of(), 7, false));
+            results.put("Q1b", runQuestion(workspaces, studentRoot, username,
+                    new QuestionSpec("Q1b", "Q1", "Q1bEdgeCase", List.of("Q1b.java")), List.of(), 9, false));
+            results.put("Q2a", runQuestion(workspaces, studentRoot, username,
+                    new QuestionSpec("Q2a", "Q2", "Q2aEdgeCase", List.of("Q2a.java")), List.of("personsEdgeCase.txt"), 7, false));
+            results.put("Q2b", runQuestion(workspaces, studentRoot, username,
+                    new QuestionSpec("Q2b", "Q2", "Q2bEdgeCase", List.of("Q2b.java")), List.of("studentsEdgeCase.txt"), 6, false));
+            // Q3 compiles every student file, as before, so helper classes in any file are found.
+            results.put("Q3", runQuestion(workspaces, studentRoot, username,
+                    new QuestionSpec("Q3", "Q3", "Q3EdgeCase", List.of()), List.of(), 16, true));
 
             return new Result(username, results, "");
         } catch (Exception e) {
@@ -48,59 +71,63 @@ public class EdgeCaseRunner {
         return new Result(username, new LinkedHashMap<>(), reason == null ? "Skipped" : reason);
     }
 
-    private QuestionResult runQuestion(File studentRoot, Path tempRoot, String qid, String folderName,
-            String edgeClass, List<String> requiredSources, List<String> edgeData,
-            int expectedTests, boolean copyAllJava) throws Exception {
+    private QuestionResult runQuestion(WorkspaceManager workspaces, File studentRoot, String username,
+            QuestionSpec question, List<String> edgeData, int expectedTests, boolean compileAllSources) throws IOException {
+        String qid = question.getQuestionId();
 
-        Path work = tempRoot.resolve(qid);
-        Files.createDirectories(work);
-
-        File questionFolder = findQuestionFolder(studentRoot, folderName);
-        if (questionFolder == null) return new QuestionResult(qid, 0, expectedTests, "Missing " + folderName + " folder");
-
-        if (copyAllJava) {
-            copyJavaFiles(questionFolder.toPath(), work);
-        } else {
-            for (String name : requiredSources) {
-                Path source = questionFolder.toPath().resolve(name);
-                if (!Files.isRegularFile(source)) return new QuestionResult(qid, 0, expectedTests, "Missing " + name);
-                Files.copy(source, work.resolve(name), StandardCopyOption.REPLACE_EXISTING);
-            }
+        if (findQuestionFolder(studentRoot, question.getFolderName()) == null) {
+            return new QuestionResult(qid, 0, expectedTests, "Missing " + question.getFolderName() + " folder");
         }
+        File edgeSource = new File(edgeFolder, question.getTesterSourceFile());
+        if (!edgeSource.isFile()) return new QuestionResult(qid, 0, expectedTests, "Missing " + edgeSource);
 
-        copyResources(new File(resourcesFolder, folderName).toPath(), work);
+        QuestionWorkspace workspace = workspaces.prepare(studentRoot, username, question);
 
-        Path edgeSource = edgeFolder.toPath().resolve(edgeClass + ".java");
-        if (!Files.isRegularFile(edgeSource)) return new QuestionResult(qid, 0, expectedTests, "Missing " + edgeSource);
-        Files.copy(edgeSource, work.resolve(edgeSource.getFileName()), StandardCopyOption.REPLACE_EXISTING);
-
+        // Edge-case data files are not part of the official resources, so copy them alongside.
         for (String name : edgeData) {
             Path data = edgeFolder.toPath().resolve(name);
             if (!Files.isRegularFile(data)) return new QuestionResult(qid, 0, expectedTests, "Missing " + data);
-            Files.copy(data, work.resolve(name), StandardCopyOption.REPLACE_EXISTING);
+            Files.copy(data, workspace.getDirectory().toPath().resolve(name), StandardCopyOption.REPLACE_EXISTING);
         }
 
-        ArrayList<String> javaFiles = new ArrayList<>();
-        try (Stream<Path> stream = Files.list(work)) {
-            stream.filter(p -> Files.isRegularFile(p) && p.getFileName().toString().endsWith(".java"))
-                    .forEach(p -> javaFiles.add(p.getFileName().toString()));
+        CompilationResult compilation = compiler.compile(workspace, question, compileAllSources);
+        switch (compilation.getStatus()) {
+            case SUCCESS:
+                break;
+            case MISSING_SOURCES:
+                return new QuestionResult(qid, 0, expectedTests, "Missing " + String.join(", ", compilation.getMissingSources()));
+            case SYSTEM_ERROR:
+                boolean timedOut = compilation.getOutput().contains("(" + ExecutionResult.Status.TIMED_OUT + ")");
+                return new QuestionResult(qid, 0, expectedTests, timedOut ? "Compilation timed out" : "Compilation failed");
+            default:
+                return new QuestionResult(qid, 0, expectedTests, "Compilation failed");
         }
 
-        ArrayList<String> compileCommand = new ArrayList<>(List.of("javac", "-cp", ".", "-d", "."));
-        compileCommand.addAll(javaFiles);
+        ExecutionResult execution = executor.runTester(workspace, question);
+        int passed = Math.min(countPassedLines(execution.getStdout()), expectedTests);
+        return new QuestionResult(qid, passed, expectedTests, describe(execution));
+    }
 
-        ProcessResult compile = execute(compileCommand, work, 10);
-        if (compile.timedOut) return new QuestionResult(qid, 0, expectedTests, "Compilation timed out");
-        if (compile.exitCode != 0) return new QuestionResult(qid, 0, expectedTests, "Compilation failed");
+    private String describe(ExecutionResult execution) {
+        switch (execution.getStatus()) {
+            case COMPLETED: return "Completed";
+            case TIMED_OUT: return "Timed out";
+            case EXITED_WITH_ERROR: return "Exited with error";
+            default: return "Could not run: " + execution.getMessage();
+        }
+    }
 
-        ProcessResult execution = execute(List.of("java", "-cp", ".", edgeClass), work, 8);
-        int passed = Math.min(count(execution.output, "PASSED"), expectedTests);
-
-        String status = execution.timedOut ? "Timed out"
-                : execution.exitCode == 0 ? "Completed"
-                : "Exited with error";
-
-        return new QuestionResult(qid, passed, expectedTests, status);
+    /**
+     * Counts tester verdict lines: "PASSED" on its own, or "PASSED, ..." (Q2b's exception checks).
+     * Whole lines only, so "PASSED" inside other text (e.g. a student's print) is not counted.
+     */
+    private int countPassedLines(String output) {
+        int count = 0;
+        for (String line : output.split("\\R")) {
+            String verdict = line.trim();
+            if (verdict.equals("PASSED") || verdict.startsWith("PASSED,")) count++;
+        }
+        return count;
     }
 
     private File findQuestionFolder(File root, String name) {
@@ -108,72 +135,6 @@ public class EdgeCaseRunner {
         if (folders == null) return null;
         for (File folder : folders) if (folder.getName().equalsIgnoreCase(name)) return folder;
         return null;
-    }
-
-    private void copyJavaFiles(Path source, Path destination) throws IOException {
-        try (Stream<Path> stream = Files.list(source)) {
-            for (Path path : (Iterable<Path>) stream
-                    .filter(p -> Files.isRegularFile(p) && p.getFileName().toString().endsWith(".java"))::iterator) {
-                Files.copy(path, destination.resolve(path.getFileName()), StandardCopyOption.REPLACE_EXISTING);
-            }
-        }
-    }
-
-    private void copyResources(Path source, Path destination) throws IOException {
-        if (!Files.isDirectory(source)) return;
-
-        try (Stream<Path> stream = Files.list(source)) {
-            for (Path path : (Iterable<Path>) stream.filter(Files::isRegularFile)::iterator) {
-                Files.copy(path, destination.resolve(path.getFileName()), StandardCopyOption.REPLACE_EXISTING);
-            }
-        }
-    }
-
-    private ProcessResult execute(List<String> command, Path work, int timeoutSeconds) throws Exception {
-        ProcessBuilder builder = new ProcessBuilder(command);
-        builder.directory(work.toFile());
-        builder.redirectErrorStream(true);
-
-        Process process = builder.start();
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-
-        Thread reader = new Thread(() -> {
-            try (InputStream input = process.getInputStream()) {
-                byte[] buffer = new byte[4096];
-                int read;
-                int total = 0;
-
-                while ((read = input.read(buffer)) != -1 && total < 1_000_000) {
-                    int keep = Math.min(read, 1_000_000 - total);
-                    output.write(buffer, 0, keep);
-                    total += keep;
-                }
-            } catch (IOException ignored) {}
-        });
-
-        reader.start();
-
-        boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-        if (!finished) process.destroyForcibly();
-
-        reader.join(1000);
-
-        return new ProcessResult(
-                finished ? process.exitValue() : -1,
-                output.toString(StandardCharsets.UTF_8),
-                !finished);
-    }
-
-    private int count(String text, String word) {
-        int count = 0;
-        int index = 0;
-
-        while ((index = text.indexOf(word, index)) >= 0) {
-            count++;
-            index += word.length();
-        }
-
-        return count;
     }
 
     private String safe(String value) {
@@ -230,17 +191,5 @@ public class EdgeCaseRunner {
         public int getFailed() { return total - passed; }
         public String getStatus() { return status; }
         public String getScoreText() { return passed + "/" + total; }
-    }
-
-    private static class ProcessResult {
-        final int exitCode;
-        final String output;
-        final boolean timedOut;
-
-        ProcessResult(int exitCode, String output, boolean timedOut) {
-            this.exitCode = exitCode;
-            this.output = output;
-            this.timedOut = timedOut;
-        }
     }
 }

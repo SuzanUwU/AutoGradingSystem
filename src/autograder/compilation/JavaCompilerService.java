@@ -8,6 +8,7 @@ import autograder.model.QuestionSpec;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -49,12 +50,23 @@ public class JavaCompilerService {
      * Never throws: every failure is described by the returned result.
      */
     public CompilationResult compile(QuestionWorkspace workspace, QuestionSpec question) {
+        return compile(workspace, question, false);
+    }
+
+    /**
+     * Same as {@link #compile(QuestionWorkspace, QuestionSpec)}, but with {@code compileAllSources}
+     * every .java file in the workspace is compiled, not only what the tester reaches. Needed when a
+     * student puts helper classes in files whose names do not match the class (used by edge cases for Q3).
+     */
+    public CompilationResult compile(QuestionWorkspace workspace, QuestionSpec question, boolean compileAllSources) {
         // Do not attempt compilation when a required student source file is missing.
         if (!workspace.isReady()) return CompilationResult.missingSources(workspace.getMissingSources());
 
         File directory = workspace.getDirectory();
+        // Default: only the tester, javac finds what it needs via -sourcepath. Optionally every source.
+        List<String> sources = compileAllSources ? listJavaSources(directory) : List.of(question.getTesterSourceFile());
         // Run javac inside the isolated question folder, not in the original submission.
-        ExecutionResult javac = processRunner.run(buildCommand(question.getTesterSourceFile()), directory, timeoutSeconds);
+        ExecutionResult javac = processRunner.run(buildCommand(sources), directory, timeoutSeconds);
         String output = combineOutput(javac);
 
         // Translate process outcomes into a consistent CompilationResult for the grader.
@@ -72,8 +84,17 @@ public class JavaCompilerService {
         }
     }
 
-    // Build a command that compiles the tester and only student sources it references.
-    private List<String> buildCommand(String testerSourceFile) {
+    // List every .java file in the workspace, sorted so the javac command is deterministic.
+    private List<String> listJavaSources(File directory) {
+        File[] files = directory.listFiles(file -> file.isFile() && file.getName().endsWith(".java"));
+        List<String> names = new ArrayList<>();
+        if (files != null) for (File file : files) names.add(file.getName());
+        Collections.sort(names);
+        return names;
+    }
+
+    // Build a command that compiles the given sources (normally just the tester) and what they reference.
+    private List<String> buildCommand(List<String> sourceFiles) {
         List<String> command = new ArrayList<>();
         command.add(javacExecutable);
         command.add("-encoding");
@@ -91,7 +112,7 @@ public class JavaCompilerService {
         command.add(".");
         command.add("-d");
         command.add(".");
-        command.add(testerSourceFile);
+        command.addAll(sourceFiles);
         return command;
     }
 
