@@ -11,18 +11,46 @@ import autograder.model.*;
 final class SubmissionResultsController {
     private final MainFrame f;
     private javax.swing.table.TableColumn plagiarismColumn;
+    private javax.swing.table.TableColumn instructorReviewColumn;
 
     SubmissionResultsController(MainFrame frame) { this.f = frame; }
 
-    /** Keep the similarity column exclusive to the Java assessment view. */
+    /** Keep Java-only result columns exclusive to the Java assessment view. */
     void updatePlagiarismColumn() {
-        int viewColumn = f.resultTable.convertColumnIndexToView(7);
+        int plagiarismViewColumn =
+                f.resultTable.convertColumnIndexToView(7);
 
-        if (viewColumn >= 0) {
-            plagiarismColumn = f.resultTable.getColumnModel().getColumn(viewColumn);
-            if (f.isPythonMode()) f.resultTable.removeColumn(plagiarismColumn);
-        } else if (!f.isPythonMode() && plagiarismColumn != null) {
+        if (plagiarismViewColumn >= 0) {
+            plagiarismColumn =
+                    f.resultTable.getColumnModel()
+                            .getColumn(plagiarismViewColumn);
+
+            if (f.isPythonMode()) {
+                f.resultTable.removeColumn(plagiarismColumn);
+            }
+
+        } else if (!f.isPythonMode()
+                && plagiarismColumn != null) {
+
             f.resultTable.addColumn(plagiarismColumn);
+        }
+
+        int reviewViewColumn =
+                f.resultTable.convertColumnIndexToView(8);
+
+        if (reviewViewColumn >= 0) {
+            instructorReviewColumn =
+                    f.resultTable.getColumnModel()
+                            .getColumn(reviewViewColumn);
+
+            if (f.isPythonMode()) {
+                f.resultTable.removeColumn(instructorReviewColumn);
+            }
+
+        } else if (!f.isPythonMode()
+                && instructorReviewColumn != null) {
+
+            f.resultTable.addColumn(instructorReviewColumn);
         }
     }
 
@@ -33,8 +61,17 @@ final class SubmissionResultsController {
         f.generatedTotals.add("");
 
         f.tableModel.addRow(new Object[]{
-                result.getUsername(), result.getStructureStatus(), result.getHeaderStatus(), result.getOverallStatus(),
-                "Not graded", "", "", f.isPythonMode() ? "" : "Checking..."
+                result.getUsername(),
+                result.getStructureStatus(),
+                result.getHeaderStatus(),
+                result.getOverallStatus(),
+                "Not graded",
+                "",
+                "",
+                f.isPythonMode() ? "" : "Checking...",
+                "Review".equals(result.getOverallStatus())
+                        ? "Pending"
+                        : "-"
         });
 
         updateSummary();
@@ -251,5 +288,22 @@ final class SubmissionResultsController {
             PlagarismCheck.Result similarity = f.plagiarismResults.get(submission.getUsername());
             f.tableModel.setValueAt(similarity == null ? "Could not check" : similarity.getStatus(), row, 7);
         }
+
+        String instructorReview = "-";
+
+        if ("Review".equals(
+                submission.getOverallStatus())) {
+
+            instructorReview =
+                    student.isReviewResolved()
+                            ? "Resolved"
+                            : "Pending";
+        }
+
+        f.tableModel.setValueAt(
+                instructorReview,
+                row,
+                8
+        );
     }
 }

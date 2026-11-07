@@ -256,7 +256,8 @@ public class MainFrame extends JFrame {
                         "Grading",
                         "Total (Original Testers)",
                         "Total (Generated Testers)",
-                        "Plagiarism Check"
+                        "Plagiarism Check",
+                        "Instructor Review"
                 },
                 0
         ) {

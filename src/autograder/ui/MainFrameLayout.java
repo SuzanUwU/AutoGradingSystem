@@ -357,6 +357,9 @@ final class MainFrameLayout {
         // Apply status formatting to the plagiarism check column.
         f.resultTable.getColumnModel()
             .getColumn(7).setCellRenderer(statusRenderer);
+        
+        f.resultTable.getColumnModel()
+            .getColumn(8).setCellRenderer(statusRenderer);
 
         // Create a separate renderer for grading status.
         DefaultTableCellRenderer gradingRenderer =
@@ -492,6 +495,9 @@ final class MainFrameLayout {
 
         f.resultTable.getColumnModel()
             .getColumn(7).setPreferredWidth(145);
+
+        f.resultTable.getColumnModel()
+            .getColumn(8).setPreferredWidth(125);
 
         JPanel tablePanel = new JPanel(new BorderLayout());
 
