@@ -73,7 +73,10 @@ final class CorrectionPanelBuilder {
         for (int column = 1; column <= 6; column++) f.correctionTable.getColumnModel().getColumn(column).setCellRenderer(countRenderer);
         f.correctionTable.getColumnModel().getColumn(7).setCellRenderer(f.layout.createStatusRenderer());
 
-        panel.add(new JScrollPane(f.correctionTable), BorderLayout.CENTER);
+        JScrollPane correctionTableScroll = new JScrollPane(f.correctionTable);
+        correctionTableScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+        correctionTableScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        panel.add(correctionTableScroll, BorderLayout.CENTER);
 
         f.correctionDetailArea.setEditable(false);
         f.correctionDetailArea.setLineWrap(true);

@@ -215,8 +215,8 @@ final class MainFrameLayout {
         f.resultTable.setRowHeight(25);
         f.resultTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
-        // Fit all result columns inside the left pane without a horizontal scrollbar.
-        f.resultTable.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
+        // Keep fixed readable widths. If the pane is narrower, use the horizontal scrollbar.
+        f.resultTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         f.resultTable.setFont(f.resultTable.getFont().deriveFont(11f));
         f.resultTable.getTableHeader().setFont(f.resultTable.getTableHeader().getFont().deriveFont(Font.BOLD, 11f));
 
@@ -239,7 +239,25 @@ final class MainFrameLayout {
         JPanel tablePanel = new JPanel(new BorderLayout());
         tablePanel.setBorder(BorderFactory.createTitledBorder("Students"));
         JScrollPane tableScrollPane = new JScrollPane(f.resultTable);
-        tableScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        tableScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_ALWAYS);
+        tableScrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+
+        // Remove the empty grey area to the right of Review Status.
+        // The last column expands when there is spare viewport space, but returns to
+        // its normal width when horizontal scrolling is needed.
+        final int reviewStatusBaseWidth = 135;
+        tableScrollPane.getViewport().addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                int viewportWidth = tableScrollPane.getViewport().getWidth();
+                int otherColumnsWidth = 0;
+                for (int i = 0; i < f.resultTable.getColumnCount() - 1; i++) {
+                    otherColumnsWidth += f.resultTable.getColumnModel().getColumn(i).getPreferredWidth();
+                }
+                TableColumn lastColumn = f.resultTable.getColumnModel().getColumn(8);
+                lastColumn.setPreferredWidth(Math.max(reviewStatusBaseWidth, viewportWidth - otherColumnsWidth));
+            }
+        });
         tablePanel.add(tableScrollPane, BorderLayout.CENTER);
 
         // Student details
@@ -255,9 +273,9 @@ final class MainFrameLayout {
         detailsTabs.addTab("Full Details", new JScrollPane(f.detailsArea));
         detailsPanel.add(detailsTabs, BorderLayout.CENTER);
 
-        // Give the student table more space so all columns remain readable.
-        tablePanel.setMinimumSize(new Dimension(900, 0));
-        detailsPanel.setMinimumSize(new Dimension(400, 0));
+        // Keep both panes usable on smaller windows.
+        tablePanel.setMinimumSize(new Dimension(480, 0));
+        detailsPanel.setMinimumSize(new Dimension(300, 0));
 
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tablePanel, detailsPanel);
         splitPane.setResizeWeight(0.67);
