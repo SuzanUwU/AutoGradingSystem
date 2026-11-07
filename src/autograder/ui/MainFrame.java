@@ -93,6 +93,9 @@ public class MainFrame extends JFrame {
     // Allows manual score adjustments.
     final JButton manualButton = new JButton("Manual Score (Optional)");
 
+    // Java-only generated tester section.
+    final JPanel generatedTesterPanel = new JPanel(new BorderLayout(6, 6));
+    final JPanel gradingFlowsPanel = new JPanel(new GridLayout(1, 2, 10, 0));
     // =========================================================
     // 4. APPLICATION STATE
     // =========================================================

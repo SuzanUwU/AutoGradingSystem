@@ -170,12 +170,10 @@ final class MainFrameLayout {
 
         // GridLayout creates two equally sized columns:
         // Original Testers | Generated Testers
-        JPanel gradingFlows =
-            new JPanel(new GridLayout(1, 2, 10, 0));
+        JPanel gradingFlows = f.gradingFlowsPanel;
 
         // ORIGINAL TESTERS SECTION
-        JPanel originalPanel =
-            new JPanel(new BorderLayout(6, 6));
+        JPanel originalPanel = new JPanel(new BorderLayout(6, 6));
 
         originalPanel.setBorder(
             BorderFactory.createTitledBorder(
@@ -199,8 +197,7 @@ final class MainFrameLayout {
         );
 
         // GENERATED TESTERS SECTION
-        JPanel generatedPanel =
-            new JPanel(new BorderLayout(6, 6));
+        JPanel generatedPanel = f.generatedTesterPanel;
 
         generatedPanel.setBorder(
             BorderFactory.createTitledBorder(

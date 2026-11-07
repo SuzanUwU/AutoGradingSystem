@@ -3,12 +3,22 @@ package autograder.ui;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.table.TableColumn;
+import java.awt.Container;
 import java.io.File;
 
 /** MainFrameActions responsibilities extracted from MainFrame. */
 final class MainFrameActions {
     // Stores a reference to MainFrame to access shared GUI components.
     private final MainFrame f;
+
+    // Original CS102 GUI containers. These are remembered so the Java layout
+    // can be restored exactly after switching back from Python mode.
+    private JPanel validatePanel;
+    private JPanel originalButtonsPanel;
+    private JPanel gradingFlowsPanel;
+    private JPanel otherActionsPanel;
+
     MainFrameActions(MainFrame frame) { this.f = frame; }
 
     // 1. Registers event listeners and delegates user actions to controllers.
@@ -95,13 +105,9 @@ final class MainFrameActions {
 
         f.results.updateSummary();
 
-        // PF1-specific functionality will be added next.
-        // Disable actions that currently use Java-only logic.
         if (python) {
             f.gradeOriginalButton.setText("Start Python Grading");
-            f.generateTestersButton.setEnabled(false);
-            f.gradeGeneratedButton.setEnabled(false);
-            f.edgeCaseButton.setEnabled(false);
+            showPythonLayout();
 
             f.logArea.append(
                     "IS1704 Python mode selected.\n"
@@ -111,6 +117,7 @@ final class MainFrameActions {
             f.gradeOriginalButton.setText(
                     "Start Grading (Original Testers)"
             );
+            showJavaLayout();
 
             f.logArea.append(
                     "CS102 Java mode selected.\n"
@@ -118,5 +125,70 @@ final class MainFrameActions {
         }
 
         f.uiState.setControlsEnabled(true);
+        f.revalidate();
+        f.repaint();
+    }
+
+    // Remembers the original CS102 panel structure before buttons are moved.
+    private void rememberOriginalLayout() {
+        if (validatePanel != null) {
+            return;
+        }
+
+        validatePanel = (JPanel) f.validateButton.getParent();
+        originalButtonsPanel = (JPanel) f.gradeOriginalButton.getParent();
+
+        Container originalPanel = originalButtonsPanel.getParent();
+        gradingFlowsPanel = (JPanel) originalPanel.getParent();
+
+        otherActionsPanel = (JPanel) f.exportButton.getParent();
+    }
+
+    // IS1704 uses one compact row: Validate | Start Python Grading | Export Results.
+    private void showPythonLayout() {
+        rememberOriginalLayout();
+
+        validatePanel.add(f.gradeOriginalButton);
+        validatePanel.add(f.exportButton);
+
+        gradingFlowsPanel.setVisible(false);
+        otherActionsPanel.setVisible(false);
+
+        // Python uses only one grading total, so hide the generated-tester column.
+        TableColumn originalTotal = f.resultTable.getColumnModel().getColumn(5);
+        TableColumn generatedTotal = f.resultTable.getColumnModel().getColumn(6);
+
+        originalTotal.setHeaderValue("Total");
+
+        generatedTotal.setMinWidth(0);
+        generatedTotal.setMaxWidth(0);
+        generatedTotal.setPreferredWidth(0);
+        generatedTotal.setResizable(false);
+
+        f.resultTable.getTableHeader().repaint();
+    }
+
+    // Restores the original CS102 layout exactly.
+    private void showJavaLayout() {
+        rememberOriginalLayout();
+
+        originalButtonsPanel.add(f.gradeOriginalButton);
+        otherActionsPanel.add(f.exportButton, 1);
+
+        gradingFlowsPanel.setVisible(true);
+        otherActionsPanel.setVisible(true);
+
+        // Restore the original CS102 result columns.
+        TableColumn originalTotal = f.resultTable.getColumnModel().getColumn(5);
+        TableColumn generatedTotal = f.resultTable.getColumnModel().getColumn(6);
+
+        originalTotal.setHeaderValue("Total (Original Testers)");
+
+        generatedTotal.setMinWidth(15);
+        generatedTotal.setMaxWidth(Integer.MAX_VALUE);
+        generatedTotal.setPreferredWidth(155);
+        generatedTotal.setResizable(true);
+
+        f.resultTable.getTableHeader().repaint();
     }
 }
