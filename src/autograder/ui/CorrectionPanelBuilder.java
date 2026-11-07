@@ -12,7 +12,9 @@ final class CorrectionPanelBuilder {
     /** Handles create correction panel. */
     JPanel createCorrectionPanel() {
         JPanel panel = new JPanel(new BorderLayout(6, 6));
+        panel.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
         f.mostFixesLabel.setFont(f.mostFixesLabel.getFont().deriveFont(Font.BOLD));
+        f.mostFixesLabel.setBorder(BorderFactory.createEmptyBorder(2, 4, 4, 4));
         panel.add(f.mostFixesLabel, BorderLayout.NORTH);
 
         f.correctionTable.setFillsViewportHeight(true);
@@ -76,7 +78,7 @@ final class CorrectionPanelBuilder {
         JScrollPane correctionTableScroll = new JScrollPane(f.correctionTable);
         correctionTableScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
         correctionTableScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-        panel.add(correctionTableScroll, BorderLayout.CENTER);
+        correctionTableScroll.setMinimumSize(new Dimension(0, 60));
 
         f.correctionDetailArea.setEditable(false);
         f.correctionDetailArea.setLineWrap(true);
@@ -86,7 +88,15 @@ final class CorrectionPanelBuilder {
         JScrollPane correctionDetailsScroll = new JScrollPane(f.correctionDetailArea);
         correctionDetailsScroll.setBorder(BorderFactory.createTitledBorder("Selected Student"));
         correctionDetailsScroll.setPreferredSize(new Dimension(0, 150));
-        panel.add(correctionDetailsScroll, BorderLayout.SOUTH);
+        correctionDetailsScroll.setMinimumSize(new Dimension(0, 70));
+
+        // A vertical split keeps the table and the details box from overlapping
+        // when the window is short, and lets the user drag the divider.
+        JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, correctionTableScroll, correctionDetailsScroll);
+        split.setResizeWeight(0.6);
+        split.setContinuousLayout(true);
+        split.setBorder(null);
+        panel.add(split, BorderLayout.CENTER);
         return panel;
     }
 
