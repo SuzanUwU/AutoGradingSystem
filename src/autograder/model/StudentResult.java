@@ -85,18 +85,29 @@ public class StudentResult {
     public double getTotal() { return questions.stream().mapToDouble(this::getFinalScore).sum(); }
     public double getMaximum() { return questions.stream().mapToDouble(QuestionResult::getMaxScore).sum(); }
     public boolean hasManualScores() { return !manualScores.isEmpty(); }
-    public boolean needsAttention() {
-        return ("Review".equals(submission.getOverallStatus()) && !reviewResolved)
-                || "Failed".equals(submission.getOverallStatus())
-                || !identityWarning.isEmpty()
+    /** Returns true when the grading process itself needs instructor attention. */
+    public boolean needsGradingAttention() {
+        return !identityWarning.isEmpty()
                 || !gradingError.isEmpty()
                 || questions.stream()
                 .anyMatch(q -> !"Graded successfully".equals(q.getStatusMessage()));
     }
+
+    /** Returns true when either validation or grading still needs instructor attention. */
+    public boolean needsAttention() {
+        return ("Review".equals(submission.getOverallStatus()) && !reviewResolved)
+                || "Failed".equals(submission.getOverallStatus())
+                || needsGradingAttention();
+    }
+
     public String getGradingStatus() {
         if (!graded) return "Not graded";
         if (!gradingError.isEmpty()) return "Failed";
-        return needsAttention() ? "Review" : hasManualScores() ? "Manual" : "Graded";
+        return needsGradingAttention()
+                ? "Review"
+                : hasManualScores()
+                        ? "Manual"
+                        : "Graded";
     }
     public String getDetails() {
         StringBuilder text = new StringBuilder(submission.getDetails());
