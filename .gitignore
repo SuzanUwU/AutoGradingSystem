@@ -2,7 +2,7 @@
 *.class
 
 # Trusted instructor-provided bytecode (DataException, Shape, Circle, Rectangle)
-!assessment/resources/**/*.class
+!assessment/java/resources/**/*.class
 
 # Generated content
 output/*
@@ -32,7 +32,6 @@ submissions/*
 !submissions/.gitkeep
 
 # Student data and generated files
-assessment/is1704/lab7/*roster*.csv
 submissions/
 workspace/
 output/

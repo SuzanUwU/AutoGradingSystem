@@ -12,7 +12,7 @@ import java.util.function.Consumer;
 public class JavaValidationService {
 
     // Location of the original assignment template and student submissions
-    private static final String TEMPLATE_FOLDER = "assessment/template";
+    private static final String TEMPLATE_FOLDER = "assessment/java/template";
     private final File workspaceFolder; 
 
     // Checks whether a submission is identical to the template.
