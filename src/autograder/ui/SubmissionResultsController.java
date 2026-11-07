@@ -10,37 +10,67 @@ import autograder.model.*;
 /** SubmissionResultsController responsibilities extracted from MainFrame. */
 final class SubmissionResultsController {
     private final MainFrame f;
+    private javax.swing.table.TableColumn plagiarismColumn;
+
     SubmissionResultsController(MainFrame frame) { this.f = frame; }
+
+    /** Keep the similarity column exclusive to the Java assessment view. */
+    void updatePlagiarismColumn() {
+        int viewColumn = f.resultTable.convertColumnIndexToView(7);
+
+        if (viewColumn >= 0) {
+            plagiarismColumn = f.resultTable.getColumnModel().getColumn(viewColumn);
+            if (f.isPythonMode()) f.resultTable.removeColumn(plagiarismColumn);
+        } else if (!f.isPythonMode() && plagiarismColumn != null) {
+            f.resultTable.addColumn(plagiarismColumn);
+        }
+    }
 
     /** Handles add submission result. */
     void addSubmissionResult(SubmissionResult result) {
         StudentResult student = new StudentResult(result);
         f.studentResults.add(student);
         f.generatedTotals.add("");
-        f.tableModel.addRow(new Object[] {
+
+        f.tableModel.addRow(new Object[]{
                 result.getUsername(), result.getStructureStatus(), result.getHeaderStatus(), result.getOverallStatus(),
-                "Not graded", "", ""
+                "Not graded", "", "", f.isPythonMode() ? "" : "Checking..."
         });
+
         updateSummary();
         refreshCorrectionTable();
-        if (f.resultTable.getSelectedRow() == -1 && f.resultTable.getRowCount() > 0) {
+
+        if (f.resultTable.getSelectedRow() == -1 && f.resultTable.getRowCount() > 0)
             f.resultTable.setRowSelectionInterval(0, 0);
-        }
     }
 
     /** Handles show selected student. */
     void showSelectedStudent() {
         int viewRow = f.resultTable.getSelectedRow();
+
         if (viewRow < 0) {
             f.manualButton.setEnabled(false);
             f.detailsArea.setText("Select a student to view submission details.");
             f.correctionDetailArea.setText("Select a student to see exact correction files and anomalies.");
             return;
         }
+
         int modelRow = f.resultTable.convertRowIndexToModel(viewRow);
         if (modelRow >= f.studentResults.size()) return;
+
         StudentResult student = f.studentResults.get(modelRow);
-        f.detailsArea.setText(student.getDetails());
+        String details = student.getDetails();
+
+        if (!f.isPythonMode()) {
+            PlagarismCheck.Result similarity = f.plagiarismResults.get(student.getSubmission().getUsername());
+            String similarityDetails = similarity == null
+                    ? "No similarity result available yet."
+                    : similarity.getStatus() + "\n" + similarity.getDetails();
+
+            details += "\n\nCODE SIMILARITY CHECK\n" + similarityDetails;
+        }
+
+        f.detailsArea.setText(details);
         showCorrectionSummary(student.getSubmission());
         selectCorrectionRow(student.getSubmission().getUsername());
         f.manualButton.setEnabled(!f.busy && !student.getQuestions().isEmpty());
@@ -50,16 +80,20 @@ final class SubmissionResultsController {
     /** Handles refresh correction table. */
     void refreshCorrectionTable() {
         f.correctionTableModel.setRowCount(0);
+
         for (StudentResult student : f.studentResults) {
             SubmissionResult s = student.getSubmission();
-            f.correctionTableModel.addRow(new Object[] {
+
+            f.correctionTableModel.addRow(new Object[]{
                     s.getUsername(), s.getFolderFixCount(), s.getNameFixCount(), s.getEmailFixCount(),
                     s.getOpenIssueCount(), s.getAnomalyCount(), s.getTotalFixCount(), s.getOverallStatus()
             });
         }
+
         f.correctionSorter.setSortKeys(Arrays.asList(
                 new RowSorter.SortKey(6, SortOrder.DESCENDING),
                 new RowSorter.SortKey(0, SortOrder.ASCENDING)));
+
         updateMostFixesLabel();
     }
 
@@ -69,15 +103,19 @@ final class SubmissionResultsController {
             f.mostFixesLabel.setText("Most fixes: -");
             return;
         }
+
         int max = f.studentResults.stream().mapToInt(s -> s.getSubmission().getTotalFixCount()).max().orElse(0);
+
         if (max == 0) {
             f.mostFixesLabel.setText("Most fixes: None");
             return;
         }
+
         ArrayList<String> names = new ArrayList<>();
-        for (StudentResult student : f.studentResults) {
+
+        for (StudentResult student : f.studentResults)
             if (student.getSubmission().getTotalFixCount() == max) names.add(student.getSubmission().getUsername());
-        }
+
         f.mostFixesLabel.setText("Most fixes: " + String.join(", ", names) + " (" + max + ")");
     }
 
@@ -85,8 +123,10 @@ final class SubmissionResultsController {
     void showSelectedCorrection() {
         int viewRow = f.correctionTable.getSelectedRow();
         if (viewRow < 0) return;
+
         int modelRow = f.correctionTable.convertRowIndexToModel(viewRow);
         String username = String.valueOf(f.correctionTableModel.getValueAt(modelRow, 0));
+
         for (StudentResult student : f.studentResults) {
             if (student.getSubmission().getUsername().equals(username)) {
                 showCorrectionSummary(student.getSubmission());
@@ -98,13 +138,25 @@ final class SubmissionResultsController {
     /** Handles show correction summary. */
     void showCorrectionSummary(SubmissionResult submission) {
         StringBuilder text = new StringBuilder();
+
         text.append(submission.getUsername()).append(" | Total fixes: ").append(submission.getTotalFixCount())
                 .append(" | Status: ").append(submission.getOverallStatus()).append('\n');
-        text.append("Folder (").append(submission.getFolderFixCount()).append("): ").append(joinDetails(submission.getFolderFixDetails())).append('\n');
-        text.append("Name (").append(submission.getNameFixCount()).append("): ").append(joinDetails(submission.getNameFixDetails())).append('\n');
-        text.append("Email (").append(submission.getEmailFixCount()).append("): ").append(joinDetails(submission.getEmailFixDetails())).append('\n');
-        text.append("Open Issues (").append(submission.getOpenIssueCount()).append("): ").append(joinDetails(submission.getOpenIssueDetails())).append('\n');
-        text.append("Anomalies (").append(submission.getAnomalyCount()).append("): ").append(joinDetails(submission.getAnomalyDetails()));
+
+        text.append("Folder (").append(submission.getFolderFixCount()).append("): ")
+                .append(joinDetails(submission.getFolderFixDetails())).append('\n');
+
+        text.append("Name (").append(submission.getNameFixCount()).append("): ")
+                .append(joinDetails(submission.getNameFixDetails())).append('\n');
+
+        text.append("Email (").append(submission.getEmailFixCount()).append("): ")
+                .append(joinDetails(submission.getEmailFixDetails())).append('\n');
+
+        text.append("Open Issues (").append(submission.getOpenIssueCount()).append("): ")
+                .append(joinDetails(submission.getOpenIssueDetails())).append('\n');
+
+        text.append("Anomalies (").append(submission.getAnomalyCount()).append("): ")
+                .append(joinDetails(submission.getAnomalyDetails()));
+
         f.correctionDetailArea.setText(text.toString());
         f.correctionDetailArea.setCaretPosition(0);
     }
@@ -119,7 +171,10 @@ final class SubmissionResultsController {
         for (int modelRow = 0; modelRow < f.correctionTableModel.getRowCount(); modelRow++) {
             if (username.equals(f.correctionTableModel.getValueAt(modelRow, 0))) {
                 int viewRow = f.correctionTable.convertRowIndexToView(modelRow);
-                if (viewRow >= 0 && f.correctionTable.getSelectedRow() != viewRow) f.correctionTable.setRowSelectionInterval(viewRow, viewRow);
+
+                if (viewRow >= 0 && f.correctionTable.getSelectedRow() != viewRow)
+                    f.correctionTable.setRowSelectionInterval(viewRow, viewRow);
+
                 return;
             }
         }
@@ -129,8 +184,11 @@ final class SubmissionResultsController {
     void applyFilters() {
         String search = f.searchField.getText().trim();
         String status = String.valueOf(f.statusFilter.getSelectedItem());
+
         ArrayList<RowFilter<Object, Object>> filters = new ArrayList<>();
+
         if (!search.isEmpty()) filters.add(RowFilter.regexFilter("(?i)" + Pattern.quote(search), 0));
+
         if (status.equals("Needs Attention")) {
             filters.add(new RowFilter<Object, Object>() {
                 @Override
@@ -141,7 +199,9 @@ final class SubmissionResultsController {
         } else if (!status.equals("All")) {
             filters.add(RowFilter.regexFilter("^" + Pattern.quote(status) + "$", 3));
         }
+
         f.sorter.setRowFilter(filters.isEmpty() ? null : RowFilter.andFilter(filters));
+
         if (f.resultTable.getRowCount() > 0) f.resultTable.setRowSelectionInterval(0, 0);
         else f.detailsArea.setText("No students match the current search/filter.");
     }
@@ -158,9 +218,9 @@ final class SubmissionResultsController {
     /** Handles count status. */
     int countStatus(String status) {
         int count = 0;
-        for (StudentResult student : f.studentResults) {
+        for (StudentResult student : f.studentResults)
             if (status.equals(student.getSubmission().getOverallStatus())) count++;
-        }
+
         return count;
     }
 
@@ -168,11 +228,17 @@ final class SubmissionResultsController {
     void refreshStudentRow(int row) {
         StudentResult student = f.studentResults.get(row);
         SubmissionResult submission = student.getSubmission();
+
         f.tableModel.setValueAt(submission.getStructureStatus(), row, 1);
         f.tableModel.setValueAt(submission.getHeaderStatus(), row, 2);
         f.tableModel.setValueAt(submission.getOverallStatus(), row, 3);
         f.tableModel.setValueAt(student.getGradingStatus(), row, 4);
         f.tableModel.setValueAt(student.getQuestions().isEmpty() ? "" : student.getTotal() + " / " + student.getMaximum(), row, 5);
         f.tableModel.setValueAt(row < f.generatedTotals.size() ? f.generatedTotals.get(row) : "", row, 6);
+
+        if (!f.isPythonMode()) {
+            PlagarismCheck.Result similarity = f.plagiarismResults.get(submission.getUsername());
+            f.tableModel.setValueAt(similarity == null ? "Could not check" : similarity.getStatus(), row, 7);
+        }
     }
 }

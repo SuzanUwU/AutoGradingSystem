@@ -28,29 +28,27 @@ final class MainFrameActions {
         f.validateButton.addActionListener(e -> f.validation.validateSubmissions());
         f.clearLogButton.addActionListener(e -> f.logArea.setText(""));
         f.statusFilter.addActionListener(e -> f.results.applyFilters());
+
         f.searchField.getDocument().addDocumentListener(new DocumentListener() {
             @Override public void insertUpdate(DocumentEvent e) { f.results.applyFilters(); }
             @Override public void removeUpdate(DocumentEvent e) { f.results.applyFilters(); }
             @Override public void changedUpdate(DocumentEvent e) { f.results.applyFilters(); }
         });
+
         f.resultTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) f.results.showSelectedStudent();
         });
+
         f.correctionTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) f.results.showSelectedCorrection();
         });
+
         // gradeOriginalButton.addActionListener(e -> startGrading(new File("assessment/java/testers"), "Original testers", false));
         f.gradeOriginalButton.addActionListener(e -> {
-            if (f.isPythonMode()) {
-                f.pythonGrading.startPythonGrading();
-            } else {
-                f.javaGrading.startGrading(
-                    new File("assessment/java/testers"),
-                    "Original testers",
-                    false
-                );
-            }
+            if (f.isPythonMode()) f.pythonGrading.startPythonGrading();
+            else f.javaGrading.startGrading(new File("assessment/java/testers"), "Original testers", false);
         });
+
         f.generateTestersButton.addActionListener(e -> f.testers.generateTesters());
         f.gradeGeneratedButton.addActionListener(e -> f.javaGrading.startGrading(new File("generated_testers"), "Generated testers", true));
         f.edgeCaseButton.addActionListener(e -> f.edgeCases.runEdgeCases());
@@ -63,47 +61,37 @@ final class MainFrameActions {
         JFileChooser chooser = new JFileChooser(new File(f.submissionsField.getText()));
         chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         chooser.setDialogTitle("Select submissions folder");
-        if (chooser.showOpenDialog(f) == JFileChooser.APPROVE_OPTION) {
+
+        if (chooser.showOpenDialog(f) == JFileChooser.APPROVE_OPTION)
             f.submissionsField.setText(chooser.getSelectedFile().getPath());
-        }
     }
 
     // 3. Switches between Java and Python modes and resets the GUI state.
     void switchAssessmentMode() {
-        if (f.busy) {
-            return;
-        }
+        if (f.busy) return;
 
         boolean python = f.isPythonMode();
 
-        f.setTitle(python
-                ? "IS1704 Auto Grading System - Python"
-                : "CS102 Auto Grading System - Java");
-
-        f.titleLabel.setText(python
-                ? "IS1704 Auto Grading System"
-                : "CS102 Auto Grading System");
+        f.setTitle(python ? "IS1704 Auto Grading System - Python" : "CS102 Auto Grading System - Java");
+        f.titleLabel.setText(python ? "IS1704 Auto Grading System" : "CS102 Auto Grading System");
 
         // Clear results from the previous assessment.
         f.studentResults.clear();
         f.generatedTotals.clear();
         f.edgeCaseResults.clear();
+        f.plagiarismResults.clear();
 
         f.tableModel.setRowCount(0);
         f.correctionTableModel.setRowCount(0);
-
         f.resultTable.clearSelection();
         f.correctionTable.clearSelection();
-
         f.detailsArea.setText("");
         f.correctionDetailArea.setText("");
         f.logArea.setText("");
 
         f.generatedTestersReadyForCurrentRun = false;
-
         f.progressBar.setValue(0);
         f.progressBar.setString("Ready");
-
         f.results.updateSummary();
 
         if (python) {
@@ -115,15 +103,13 @@ final class MainFrameActions {
                     + "Validate submissions, then start Python grading.\n"
             );
         } else {
-            f.gradeOriginalButton.setText(
-                    "Start Grading (Original Testers)"
-            );
+            f.gradeOriginalButton.setText("Start Grading (Original Testers)");
             showJavaLayout();
-
-            f.logArea.append(
-                    "CS102 Java mode selected.\n"
-            );
+            f.logArea.append("CS102 Java mode selected.\n");
         }
+
+        // Plagiarism checking is only available for Java.
+        f.results.updatePlagiarismColumn();
 
         f.uiState.setControlsEnabled(true);
         f.revalidate();
@@ -132,16 +118,13 @@ final class MainFrameActions {
 
     // Remembers the original CS102 panel structure before buttons are moved.
     private void rememberOriginalLayout() {
-        if (validatePanel != null) {
-            return;
-        }
+        if (validatePanel != null) return;
 
         validatePanel = (JPanel) f.validateButton.getParent();
         originalButtonsPanel = (JPanel) f.gradeOriginalButton.getParent();
 
         Container originalPanel = originalButtonsPanel.getParent();
         gradingFlowsPanel = (JPanel) originalPanel.getParent();
-
         otherActionsPanel = (JPanel) f.exportButton.getParent();
     }
 

@@ -1,6 +1,4 @@
-
 package autograder.ui;
-
 
 import javax.swing.*; // Swing components used to build the graphical user interface.
 import javax.swing.table.DefaultTableModel;
@@ -20,11 +18,10 @@ public class MainFrame extends JFrame {
 
     // Dropdown allowing users to choose between Java and Python grading.
     // JComboBox displays a list of selectable options.
-    final JComboBox<String> assessmentMode =
-            new JComboBox<>(new String[] {
-                "CS102 - Java",
-                "IS1704 - Python"
-            });
+    final JComboBox<String> assessmentMode = new JComboBox<>(new String[]{
+            "CS102 - Java",
+            "IS1704 - Python"
+    });
 
     // Displays the current application title in the GUI.
     final JLabel titleLabel = new JLabel("CS102 Auto Grading System");
@@ -44,26 +41,21 @@ public class MainFrame extends JFrame {
     // normalize() removes unnecessary path elements.
     // 35 specifies the preferred text field width in columns.
     final JTextField submissionsField = new JTextField(
-            Path.of(
-                System.getProperty("user.dir"),
-                "submissions"
-            ).toAbsolutePath().normalize().toString(), 35
+            Path.of(System.getProperty("user.dir"), "submissions").toAbsolutePath().normalize().toString(), 35
     );
 
     // Allows users to search for specific student submissions.
     final JTextField searchField = new JTextField(22);
 
     // Dropdown for filtering students by validation status.
-    final JComboBox<String> statusFilter = new JComboBox<>(
-            new String[] {
-                "All",
-                "Needs Attention",
-                "Valid",
-                "Corrected",
-                "Review",
-                "Failed"
-            }
-    );
+    final JComboBox<String> statusFilter = new JComboBox<>(new String[]{
+            "All",
+            "Needs Attention",
+            "Valid",
+            "Corrected",
+            "Review",
+            "Failed"
+    });
 
     // =========================================================
     // 3. BUTTON COMPONENTS
@@ -96,6 +88,7 @@ public class MainFrame extends JFrame {
     // Java-only generated tester section.
     final JPanel generatedTesterPanel = new JPanel(new BorderLayout(6, 6));
     final JPanel gradingFlowsPanel = new JPanel(new GridLayout(1, 2, 10, 0));
+
     // =========================================================
     // 4. APPLICATION STATE
     // =========================================================
@@ -116,7 +109,11 @@ public class MainFrame extends JFrame {
 
     // Stores latest edge-case results so they can be included in the PDF report.
     final java.util.Map<String, autograder.grading.EdgeCaseRunner.Result> edgeCaseResults =
-        new java.util.LinkedHashMap<>();
+            new java.util.LinkedHashMap<>();
+
+    // GUI-only similarity results; grading and exported marks remain independent.
+    final java.util.Map<String, PlagarismCheck.Result> plagiarismResults =
+            new java.util.LinkedHashMap<>();
 
     // =========================================================
     // 5. SUMMARY AND LOG COMPONENTS
@@ -149,6 +146,7 @@ public class MainFrame extends JFrame {
     // TableModel stores the data shown inside the student table.
     final DefaultTableModel tableModel;
     final JTable resultTable;
+
     // TableRowSorter enables sorting and filtering of table rows.
     final TableRowSorter<DefaultTableModel> sorter;
 
@@ -168,12 +166,10 @@ public class MainFrame extends JFrame {
     // Displays detailed correction information.
     // 6 = preferred number of rows.
     // 40 = preferred number of columns.
-    final JTextArea correctionDetailArea =
-            new JTextArea(6, 40);
+    final JTextArea correctionDetailArea = new JTextArea(6, 40);
 
     // Displays which student required the most fixes.
-    final JLabel mostFixesLabel =
-            new JLabel("Most fixes: -");
+    final JLabel mostFixesLabel = new JLabel("Most fixes: -");
 
     // =========================================================
     // 8. CONTROLLERS AND HELPER OBJECTS
@@ -186,52 +182,40 @@ public class MainFrame extends JFrame {
      */
 
     // Builds the correction summary panel and its components.
-    final CorrectionPanelBuilder correctionPanel =
-            new CorrectionPanelBuilder(this);
+    final CorrectionPanelBuilder correctionPanel = new CorrectionPanelBuilder(this);
 
     // Creates and arranges the main GUI layout.
-    final MainFrameLayout layout =
-            new MainFrameLayout(this);
+    final MainFrameLayout layout = new MainFrameLayout(this);
 
     // Connects user actions to application functionality.
-    final MainFrameActions actions =
-            new MainFrameActions(this);
+    final MainFrameActions actions = new MainFrameActions(this);
 
     // Manages displaying and filtering student results.
-    final SubmissionResultsController results =
-            new SubmissionResultsController(this);
+    final SubmissionResultsController results = new SubmissionResultsController(this);
 
     // Coordinates submission validation from the GUI.
-    final ValidationController validation =
-            new ValidationController(this);
+    final ValidationController validation = new ValidationController(this);
 
     // Updates GUI state, progress indicators, and logs.
-    final UiStateController uiState =
-            new UiStateController(this);
+    final UiStateController uiState = new UiStateController(this);
 
     // Handles additional edge-case testing actions.
-    final EdgeCaseController edgeCases =
-            new EdgeCaseController(this);
+    final EdgeCaseController edgeCases = new EdgeCaseController(this);
 
     // Handles tester generation and availability checks.
-    final TesterActionsController testers =
-            new TesterActionsController(this);
+    final TesterActionsController testers = new TesterActionsController(this);
 
     // Handles Python grading actions.
-    final PythonGradingController pythonGrading =
-            new PythonGradingController(this);
+    final PythonGradingController pythonGrading = new PythonGradingController(this);
 
     // Handles Java grading actions.
-    final JavaGradingController javaGrading =
-            new JavaGradingController(this);
+    final JavaGradingController javaGrading = new JavaGradingController(this);
 
     // Handles manual score adjustments.
-    final ManualScoreController manualScore =
-            new ManualScoreController(this);
+    final ManualScoreController manualScore = new ManualScoreController(this);
 
     // Handles exporting grading reports.
-    final ExportController export =
-            new ExportController(this);
+    final ExportController export = new ExportController(this);
 
     // =========================================================
     // 9. MAINFRAME CONSTRUCTOR
@@ -255,21 +239,21 @@ public class MainFrame extends JFrame {
         // 10. INITIALIZE STUDENT RESULTS TABLE
         // =====================================================
 
-        // Create a table model with seven columns.
+        // Create a table model with eight columns.
         // The second argument (0) means the table starts with zero rows.
         tableModel = new DefaultTableModel(
-                new Object[] {
-                    "Student",
-                    "Structure",
-                    "Headers",
-                    "Status",
-                    "Grading",
-                    "Total (Original Testers)",
-                    "Total (Generated Testers)"
+                new Object[]{
+                        "Student",
+                        "Structure",
+                        "Headers",
+                        "Status",
+                        "Grading",
+                        "Total (Original Testers)",
+                        "Total (Generated Testers)",
+                        "Plagiarism Check"
                 },
                 0
         ) {
-
             // Override the default method so users cannot
             // directly edit table cells by clicking them.
             @Override
@@ -293,19 +277,18 @@ public class MainFrame extends JFrame {
         // Create the correction table with eight columns.
         // Initially, the table contains zero rows.
         correctionTableModel = new DefaultTableModel(
-                new Object[] {
-                    "Student",
-                    "Folder",
-                    "Name",
-                    "Email",
-                    "Open Issues",
-                    "Anomalies",
-                    "Total Fixes",
-                    "Status"
+                new Object[]{
+                        "Student",
+                        "Folder",
+                        "Name",
+                        "Email",
+                        "Open Issues",
+                        "Anomalies",
+                        "Total Fixes",
+                        "Status"
                 },
                 0
         ) {
-
             // Prevent direct editing of correction table cells.
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -318,13 +301,12 @@ public class MainFrame extends JFrame {
             // This helps the sorter compare numbers numerically rather than alphabetically.
             @Override
             public Class<?> getColumnClass(int columnIndex) {
-                if (columnIndex >= 1 && columnIndex <= 6)
-                    return Integer.class;
+                if (columnIndex >= 1 && columnIndex <= 6) return Integer.class;
                 return String.class;
             }
         };
 
-        // Create the correction JTable and a sorter 
+        // Create the correction JTable and a sorter
         correctionTable = new JTable(correctionTableModel);
         correctionSorter = new TableRowSorter<>(correctionTableModel);
 

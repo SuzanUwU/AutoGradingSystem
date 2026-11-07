@@ -1,4 +1,3 @@
-
 package autograder.ui;
 
 import javax.swing.*;
@@ -44,7 +43,9 @@ final class MainFrameLayout {
         headerPanel.setBorder(
             BorderFactory.createEmptyBorder(12, 15, 0, 15)
         );
+
         headerPanel.add(f.titleLabel, BorderLayout.WEST);
+
         JPanel modePanel =
             new JPanel(new FlowLayout(FlowLayout.RIGHT));
 
@@ -351,6 +352,10 @@ final class MainFrameLayout {
         f.resultTable.getColumnModel()
             .getColumn(3).setCellRenderer(statusRenderer);
 
+        // Apply status formatting to the plagiarism check column.
+        f.resultTable.getColumnModel()
+            .getColumn(7).setCellRenderer(statusRenderer);
+
         // Create a separate renderer for grading status.
         DefaultTableCellRenderer gradingRenderer =
             new DefaultTableCellRenderer() {
@@ -482,6 +487,9 @@ final class MainFrameLayout {
 
         f.resultTable.getColumnModel()
             .getColumn(6).setPreferredWidth(155);
+
+        f.resultTable.getColumnModel()
+            .getColumn(7).setPreferredWidth(145);
 
         JPanel tablePanel = new JPanel(new BorderLayout());
 
