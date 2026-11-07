@@ -87,6 +87,7 @@ final class MainFrameActions {
         // Clear results from the previous assessment.
         f.studentResults.clear();
         f.generatedTotals.clear();
+        f.edgeCaseResults.clear();
 
         f.tableModel.setRowCount(0);
         f.correctionTableModel.setRowCount(0);
