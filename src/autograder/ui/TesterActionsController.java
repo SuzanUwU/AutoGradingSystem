@@ -13,7 +13,7 @@ final class TesterActionsController {
 
     /** Handles generate testers. */
     void generateTesters() {
-        // Path dataFolder = Path.of("assessment", "test-data");
+        // Path dataFolder = Path.of("assessment", "java", "test-data");
         // Path outputFolder = Path.of("generated_testers");
 
         try {

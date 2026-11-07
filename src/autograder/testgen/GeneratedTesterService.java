@@ -9,7 +9,7 @@ import java.util.List;
 public final class GeneratedTesterService {
     /** Generates all parameterized testers from assessment CSV data. */
     public List<Path> generate() throws IOException {
-        return new TesterGenerator(Path.of("assessment", "test-data"), Path.of("generated_testers")).generateAll();
+        return new TesterGenerator(Path.of("assessment", "java", "test-data"), Path.of("generated_testers")).generateAll();
     }
 
     /** Returns whether all expected generated testers exist. */
