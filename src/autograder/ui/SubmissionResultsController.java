@@ -70,7 +70,7 @@ final class SubmissionResultsController {
                 "",
                 f.isPythonMode() ? "" : "Checking...",
                 "Review".equals(result.getOverallStatus())
-                        ? "Pending"
+                        ? "Validation Pending"
                         : "-"
         });
 
@@ -113,8 +113,12 @@ final class SubmissionResultsController {
         selectCorrectionRow(student.getSubmission().getUsername());
         f.reviewButton.setEnabled(
                 !f.busy
-                && "Review".equals(
-                        student.getSubmission().getOverallStatus()
+                && (
+                    "Review".equals(
+                            student.getSubmission()
+                                    .getOverallStatus()
+                    )
+                    || student.hasGradingReviewIssue()
                 )
         );
 
@@ -289,19 +293,51 @@ final class SubmissionResultsController {
             f.tableModel.setValueAt(similarity == null ? "Could not check" : similarity.getStatus(), row, 7);
         }
 
-        String instructorReview = "-";
+        boolean validationIssue =
+                "Review".equals(
+                        submission.getOverallStatus()
+                );
 
-        if ("Review".equals(
-                submission.getOverallStatus())) {
+        boolean gradingIssue =
+                student.hasGradingReviewIssue();
 
-            instructorReview =
-                    student.isReviewResolved()
-                            ? "Resolved"
-                            : "Pending";
+        boolean validationPending =
+                validationIssue
+                && !student.isReviewResolved();
+
+        boolean gradingPending =
+                gradingIssue
+                && !student.isGradingReviewResolved();
+
+        String reviewStatus;
+
+        if (validationPending
+                && gradingPending) {
+
+            reviewStatus = "Both Pending";
+
+        } else if (validationPending) {
+
+            reviewStatus =
+                    "Validation Pending";
+
+        } else if (gradingPending) {
+
+            reviewStatus =
+                    "Grading Pending";
+
+        } else if (validationIssue
+                || gradingIssue) {
+
+            reviewStatus = "Resolved";
+
+        } else {
+
+            reviewStatus = "-";
         }
 
         f.tableModel.setValueAt(
-                instructorReview,
+                reviewStatus,
                 row,
                 8
         );

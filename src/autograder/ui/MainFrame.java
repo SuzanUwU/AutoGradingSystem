@@ -83,7 +83,7 @@ public class MainFrame extends JFrame {
     final JButton exportButton = new JButton("Export Results");
 
     // Allows professor to resolve submissions flagged for review.
-    final JButton reviewButton = new JButton("Review Submission");
+    final JButton reviewButton = new JButton("Review Issues");
 
     // Allows manual score adjustments.
     final JButton manualButton = new JButton("Manual Score (Optional)");
@@ -257,7 +257,7 @@ public class MainFrame extends JFrame {
                         "Total (Original Testers)",
                         "Total (Generated Testers)",
                         "Plagiarism Check",
-                        "Instructor Review"
+                        "Review Status"
                 },
                 0
         ) {

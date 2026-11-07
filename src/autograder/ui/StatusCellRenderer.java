@@ -27,7 +27,11 @@ public final class StatusCellRenderer extends DefaultTableCellRenderer {
                 case "Review": label.setBackground(new Color(254,243,199)); label.setForeground(new Color(146,64,14)); break;
                 case "Failed": label.setBackground(new Color(254,226,226)); label.setForeground(new Color(153,27,27)); break;
 
-                case "Pending": label.setBackground(new Color(254,243,199)); label.setForeground(new Color(146,64,14)); break;
+                case "Pending": 
+                case "Validation Pending":
+                case "Grading Pending":
+                case "Both Pending":
+                label.setBackground(new Color(254,243,199)); label.setForeground(new Color(146,64,14)); break;
                 case "Resolved": label.setBackground(new Color(220,245,224)); label.setForeground(new Color(28,94,45)); break;
 
                 // Plagiarism check statuses.
