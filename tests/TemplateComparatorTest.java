@@ -1,5 +1,5 @@
 import autograder.model.SubmissionResult;
-import autograder.service.AutoGradingService;
+import autograder.validation.JavaValidationService;
 import autograder.validation.TemplateComparator;
 
 import java.io.File;
@@ -17,6 +17,7 @@ import java.util.zip.ZipOutputStream;
 public class TemplateComparatorTest {
     private static final File TEMPLATE = new File("assessment/java/template");
     private static final String ISSUE = "Original resource folder submitted";
+    private static final String ANOMALY = "Original resource/template folder submitted";
     private static int passed = 0;
     private static int failed = 0;
 
@@ -46,15 +47,15 @@ public class TemplateComparatorTest {
         check("Empty submission", !comparator.isUnmodifiedTemplate(empty));
         check("Missing folder", !comparator.isUnmodifiedTemplate(new File(temp, "missing")));
 
-        // Integration: a template ZIP should produce an issue and status Review.
+        // Integration: a template ZIP should produce an issue, an anomaly and status Review.
         File zipFolder = new File(temp, "zips");
         Files.createDirectories(zipFolder.toPath());
         zip(exact, new File(zipFolder, "2023-2024-tmpl.pure.2024.zip"));
         zip(modified, new File(zipFolder, "2023-2024-tmpl.changed.2024.zip"));
 
         Map<String, SubmissionResult> results = new LinkedHashMap<>();
-        new AutoGradingService(new File(temp, "workspace"))
-                .processSubmissions(zipFolder, new AutoGradingService.Listener() {
+        new JavaValidationService(new File(temp, "workspace"))
+                .processSubmissions(zipFolder, new JavaValidationService.Listener() {
                     @Override public void onLog(String message) { }
                     @Override public void onProgress(int processed, int total) { }
                     @Override public void onSubmissionFinished(SubmissionResult result) {
@@ -66,8 +67,11 @@ public class TemplateComparatorTest {
         check("Original ZIP gets Review", original != null
                 && original.getSubmissionIssues().contains(ISSUE)
                 && "Review".equals(original.getOverallStatus()));
+        check("Original ZIP is an anomaly", original != null
+                && original.getAnomalyDetails().contains(ANOMALY));
         check("Modified ZIP has no template warning", changed != null
-                && !changed.getSubmissionIssues().contains(ISSUE));
+                && !changed.getSubmissionIssues().contains(ISSUE)
+                && !changed.getAnomalyDetails().contains(ANOMALY));
 
         System.out.printf("RESULT: %d passed, %d failed%n", passed, failed);
         if (failed > 0) System.exit(1);
