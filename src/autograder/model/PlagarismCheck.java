@@ -10,7 +10,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 
-public final class PlagarismCheck {
+public final class PlagiarismCheck {
     static final double SUSPECTED_THRESHOLD = 80.0;
     private static final int MAX_FILE_BYTES = 1024 * 1024;
     private static final int MAX_TOKENS = 5000;

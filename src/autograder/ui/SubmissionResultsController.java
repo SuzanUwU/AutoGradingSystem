@@ -100,7 +100,7 @@ final class SubmissionResultsController {
         String details = student.getDetails();
 
         if (!f.isPythonMode()) {
-            PlagarismCheck.Result similarity = f.plagiarismResults.get(student.getSubmission().getUsername());
+            PlagiarismCheck.Result similarity = f.plagiarismResults.get(student.getSubmission().getUsername());
             String similarityDetails = similarity == null
                     ? "No similarity result available yet."
                     : similarity.getStatus() + "\n" + similarity.getDetails();
@@ -289,7 +289,7 @@ final class SubmissionResultsController {
         f.tableModel.setValueAt(row < f.generatedTotals.size() ? f.generatedTotals.get(row) : "", row, 6);
 
         if (!f.isPythonMode()) {
-            PlagarismCheck.Result similarity = f.plagiarismResults.get(submission.getUsername());
+            PlagiarismCheck.Result similarity = f.plagiarismResults.get(submission.getUsername());
             f.tableModel.setValueAt(similarity == null ? "Could not check" : similarity.getStatus(), row, 7);
         }
 

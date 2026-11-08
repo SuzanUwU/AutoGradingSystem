@@ -115,7 +115,7 @@ public class MainFrame extends JFrame {
             new java.util.LinkedHashMap<>();
 
     // GUI-only similarity results; grading and exported marks remain independent.
-    final java.util.Map<String, PlagarismCheck.Result> plagiarismResults =
+    final java.util.Map<String, PlagiarismCheck.Result> plagiarismResults =
             new java.util.LinkedHashMap<>();
 
     // =========================================================

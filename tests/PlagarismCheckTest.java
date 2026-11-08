@@ -7,17 +7,17 @@ import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-/** Run with java -ea autograder.model.PlagarismCheckTest. */
-public final class PlagarismCheckTest {
+/** Run with java -ea autograder.model.PlagiarismCheckTest. */
+public final class PlagiarismCheckTest {
     private static int assertions;
 
     public static void main(String[] args) throws Exception {
-        check(PlagarismCheck.tokenize("String s = \"a // b\"; /* hi */")
-                .equals(PlagarismCheck.tokenize("String s=\"a // b\";//bye")), "Java comments");
-        check(!PlagarismCheck.tokenize("String s = \"a b\";")
-                .equals(PlagarismCheck.tokenize("String s = \"ab\";")), "String contents preserved");
-        check(!PlagarismCheck.tokenize("a++")
-                .equals(PlagarismCheck.tokenize("a + +")), "Operator boundaries");
+        check(PlagiarismCheck.tokenize("String s = \"a // b\"; /* hi */")
+                .equals(PlagiarismCheck.tokenize("String s=\"a // b\";//bye")), "Java comments");
+        check(!PlagiarismCheck.tokenize("String s = \"a b\";")
+                .equals(PlagiarismCheck.tokenize("String s = \"ab\";")), "String contents preserved");
+        check(!PlagiarismCheck.tokenize("a++")
+                .equals(PlagiarismCheck.tokenize("a + +")), "Operator boundaries");
         check(score("a b c d e f g h i j", "a b c d e f g x y z") == 70, "70% score");
         check(score("a b c d e f g h i j", "a b c d e f g h y z") == 80, "80% score");
         check(score("a b", "a b c d") == 50 && score("a b c d", "a b") == 50, "Symmetric scoring");
@@ -30,7 +30,7 @@ public final class PlagarismCheckTest {
         String a = javaAnswer("int a = 1; int b = 2;", tests);
         String b = javaAnswer("String text = \"unrelated\"; while (text.isEmpty()) { text += \"x\"; } return text;", tests);
         check(score(a, b) > 80, "Regression fixture dominated by shared main");
-        check(PlagarismCheck.similarity(answer(a), answer(b)) < 80, "Shared main excluded");
+        check(PlagiarismCheck.similarity(answer(a), answer(b)) < 80, "Shared main excluded");
         check(answer(javaAnswer("return null;", tests)).isEmpty(), "Null stub skipped");
         check(answer(javaAnswer("return 0.0;", tests)).isEmpty(), "Numeric stub skipped");
         check(answer("class Q1a { void main() {} }").isEmpty(), "Missing target not compared");
@@ -85,7 +85,7 @@ public final class PlagarismCheckTest {
         }
         System.out.println("Passed " + assertions + " similarity regression checks.");
         if (args.length > 0) {
-            var samples = new PlagarismCheck().check(Path.of(args[0]));
+            var samples = new PlagiarismCheck().check(Path.of(args[0]));
             for (var entry : samples.entrySet()) {
                 System.out.println(entry.getKey() + ": " + entry.getValue().getStatus());
                 if (entry.getValue().getStatus().equals("Suspected - review"))
@@ -99,13 +99,13 @@ public final class PlagarismCheckTest {
                 + body + "} " + main + "}";
     }
     private static List<String> answer(String text) throws IOException {
-        return PlagarismCheck.answerTokens(text, "q1a.java");
+        return PlagiarismCheck.answerTokens(text, "q1a.java");
     }
     private static double score(String a, String b) {
-        return PlagarismCheck.similarity(PlagarismCheck.tokenize(a), PlagarismCheck.tokenize(b));
+        return PlagiarismCheck.similarity(PlagiarismCheck.tokenize(a), PlagiarismCheck.tokenize(b));
     }
-    private static Map<String, PlagarismCheck.Result> run(Path folder) throws IOException {
-        return new PlagarismCheck().check(folder);
+    private static Map<String, PlagiarismCheck.Result> run(Path folder) throws IOException {
+        return new PlagiarismCheck().check(folder);
     }
     private static void check(boolean condition, String message) {
         if (!condition) throw new AssertionError(message);

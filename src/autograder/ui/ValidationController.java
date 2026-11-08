@@ -59,7 +59,7 @@ final class ValidationController {
                 new PythonValidationService(new File("assessment/python/template"));
 
         SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
-            private java.util.Map<String, PlagarismCheck.Result> similarity = java.util.Map.of();
+            private java.util.Map<String, PlagiarismCheck.Result> similarity = java.util.Map.of();
             private String similarityError;
 
             @Override
@@ -91,7 +91,7 @@ final class ValidationController {
                     listener.onLog("Checking code similarity across matching Java questions...");
 
                     try {
-                        similarity = new PlagarismCheck().check(submissionsFolder.toPath());
+                        similarity = new PlagiarismCheck().check(submissionsFolder.toPath());
                     } catch (Exception ex) {
                         similarityError = ex.getMessage();
                     }
