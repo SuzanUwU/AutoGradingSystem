@@ -16,7 +16,7 @@ final class JavaGradingController {
 
     /** Grades Java submissions using the selected tester set. */
     void startGrading(File testers, String testerLabel, boolean generatedMode) {
-        File workspace = new File("workspace");
+        File workspace = new File("workspace/java");
         File resources = new File("assessment/java/resources");
 
         if (workspace == null

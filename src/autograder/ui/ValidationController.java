@@ -51,7 +51,7 @@ final class ValidationController {
         f.generatedTestersReadyForCurrentRun = false;
         f.uiState.setControlsEnabled(false);
 
-        File workspace = new File("workspace");
+        File workspace = new File("workspace/java");
         JavaValidationService service = new JavaValidationService(workspace);
         final boolean pythonMode = f.isPythonMode();
 

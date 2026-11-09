@@ -19,7 +19,7 @@ public final class PythonValidationService {
     private final Path correctedDirectory;
 
     public PythonValidationService(File templateDirectory) {
-        this(templateDirectory, new File("output/is1704-corrected"));
+        this(templateDirectory, new File("workspace/python"));
     }
     public PythonValidationService(File templateDirectory, File correctedDirectory) {
         this.templateDirectory = templateDirectory.toPath();
@@ -27,6 +27,13 @@ public final class PythonValidationService {
     }
 
     public void processSubmissions(File directory, JavaValidationService.Listener listener) {
+        try {
+            new WorkspaceCleaner(correctedDirectory.toFile()).cleanWorkspace();
+        } catch (IOException e) {
+            throw new RuntimeException(
+                    "Could not clear Python workspace: " + e.getMessage(), e);
+        }
+
         File[] files = directory.listFiles(f -> f.isFile() && f.getName().toLowerCase(Locale.ROOT).endsWith(".zip"));
         if (files == null) files = new File[0];
         Arrays.sort(files, Comparator.comparing(File::getName));

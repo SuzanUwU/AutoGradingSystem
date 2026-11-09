@@ -6,6 +6,7 @@ import javax.swing.event.DocumentListener;
 import javax.swing.table.TableColumn;
 import java.awt.Container;
 import java.io.File;
+import java.nio.file.Path;
 
 /** MainFrameActions responsibilities extracted from MainFrame. */
 final class MainFrameActions {
@@ -64,6 +65,13 @@ final class MainFrameActions {
         if (f.busy) return;
 
         boolean python = f.isPythonMode();
+        Path submissionsPath = python
+                ? Path.of(System.getProperty("user.dir"), "submissions", "python")
+                : Path.of(System.getProperty("user.dir"), "submissions", "java", "original");
+
+        f.submissionsField.setText(
+                submissionsPath.toAbsolutePath().normalize().toString()
+        );
         f.setTitle(python ? "IS1704 Auto Grading System - Python" : "CS102 Auto Grading System - Java");
         f.titleLabel.setText(python ? "IS1704 Auto Grading System" : "CS102 Auto Grading System");
 

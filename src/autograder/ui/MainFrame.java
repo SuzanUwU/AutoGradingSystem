@@ -41,7 +41,8 @@ public class MainFrame extends JFrame {
     // normalize() removes unnecessary path elements.
     // 35 specifies the preferred text field width in columns.
     final JTextField submissionsField = new JTextField(
-            Path.of(System.getProperty("user.dir"), "submissions").toAbsolutePath().normalize().toString(), 35
+            Path.of(System.getProperty("user.dir"), "submissions", "java", "original")
+                .toAbsolutePath().normalize().toString(), 35
     );
 
     // Allows users to search for specific student submissions.

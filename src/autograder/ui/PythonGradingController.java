@@ -74,7 +74,7 @@ final class PythonGradingController {
                         // Prefer the corrected ZIP when available.
                         File original = new File(submissions, username + ".zip");
                         File corrected = new File(
-                                "output/is1704-corrected", username + ".zip");
+                                "workspace/python", username + ".zip");
 
                         File selected =
                                 "Corrected".equals(submission.getOverallStatus())

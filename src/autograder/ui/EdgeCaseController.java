@@ -16,7 +16,7 @@ final class EdgeCaseController {
 
     /** Runs optional edge-case tests without changing official grades. */
     void runEdgeCases() {
-        File workspace = new File("workspace");
+        File workspace = new File("workspace/java");
         File edgecases = new File("edgecases");
         File resources = new File("assessment/java/resources");
 

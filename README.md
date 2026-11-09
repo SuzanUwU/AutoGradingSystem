@@ -23,6 +23,10 @@ The default input folder is:
 
 ```text
 submissions/
+├── java/
+│   ├── original/
+│   └── batch100/
+└── python/
 ```
 
 A different submissions folder can also be selected through the GUI using **Browse**.
@@ -103,7 +107,7 @@ Recoverable structure and header problems are corrected only in the extracted wo
 When safe, an incorrect Python ZIP folder hierarchy can be normalized into:
 
 ```text
-output/is1704-corrected/
+workspace/python/
 ```
 
 ---
@@ -469,8 +473,9 @@ AutoGradingSystem/
 ├── generated_testers/
 ├── edgecases/
 ├── workspace/
+│   ├── java/
+│   └── python/
 ├── temp_workspaces/
-├── output/
 ├── tests/
 ├── config/
 ├── lib/
@@ -569,7 +574,7 @@ bash compile.sh
 bash run.sh
 ```
 
-Run the scripts from the project root so the assessment, library, workspace, and output paths resolve correctly.
+Run the scripts from the project root so the assessment, library, workspace, and submission paths resolve correctly.
 
 ---
 
@@ -591,7 +596,10 @@ IS1704 - Python
 
 ### Step 2 — Select submissions
 
-Use the default `submissions/` folder or click **Browse** to select another directory containing student ZIP files.
+Java mode defaults to: submissions/java/original/
+Python mode defaults to: submissions/python/
+
+Use Browse to select another submissions folder when needed, such as: submissions/java/batch100/
 
 ### Step 3 — Validate
 

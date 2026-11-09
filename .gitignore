@@ -27,12 +27,7 @@ test-classes/
 .DS_Store
 Thumbs.db
 
-# Student submissions
-submissions/*
-!submissions/.gitkeep
-
 # Student data and generated files
-submissions/
 workspace/
 output/
 classes/
