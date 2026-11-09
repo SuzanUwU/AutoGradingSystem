@@ -668,13 +668,12 @@ and choose the destination for the official CSV. The detailed PDF is created bes
 
 | Member | Contribution |
 |---|---|
-| Thet Htar Nwe | Main GUI & Workflow Integration, Batch Processing & Error Handling, Validation Workflow Integration, Progress Tracking & System Log, Submission Correction & Correction History, Validation and Grading Review Issues Workflow |
-| Thet Htar Nwe — Bonus | Parameterized/Generated Tester Files; 50 Additional Dummy Submissions |
-| Team Member 2 | Add contribution here |
-| Team Member 3 | Add contribution here |
-| Team Member 4 | Add contribution here |
-| Team Member 5 | Add contribution here |
-| Team Member 6 | Add contribution here |
+| Thet Htar Nwe | Main GUI & Workflow Integration, Batch Processing & Error Handling, Progress Tracking, System Log & Review Issues, Submission Correction & Correction History, Generated Tester Files (Bonus), 50 Additional Dummy Submissions (Bonus) |
+| Khin Phone Pyae | Project Setup & System Architecture, ZIP Extraction & Submission Validation Process, Detailed PDF Report Exporting, GitHub Version Control & Code Merging, 50 Additional Dummy Submissions (Bonus) |
+| Su Pyae Pyae Zaw | Grading System for Java Lab Test Submissions & Score Calculation, Python Lab Test Validation, Correction, Grading & Exporting Results (Bonus) |
+| Delise Lim | CSV Exporting of the Final Grade, Detailed PDF Report Exporting, Edge Cases (Bonus) |
+| Sui Ruirong | Compilation, Execution, Template Detector (Bonus), Edge Cases (Bonus) |
+| Fang Yutong | GUI, Manual Marking, Files Exporting, Plagiarism Check Feature (Bonus) |
 
 ---
 
