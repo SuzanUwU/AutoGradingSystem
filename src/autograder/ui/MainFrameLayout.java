@@ -10,6 +10,8 @@ final class MainFrameLayout {
     private JSplitPane submissionsSplitPane;
     private JPanel studentTablePanel;
     private JPanel submissionDetailsPanel;
+    private JScrollPane studentTableScrollPane;
+    private boolean pythonLayout;
 
     MainFrameLayout(MainFrame frame) { this.f = frame; }
 
@@ -258,50 +260,21 @@ final class MainFrameLayout {
 
         studentTablePanel = new JPanel(new BorderLayout());
         studentTablePanel.setBorder(BorderFactory.createTitledBorder("Students"));
-        JScrollPane tableScrollPane = new JScrollPane(f.resultTable);
-        tableScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_ALWAYS);
-        tableScrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
-        tableScrollPane.getHorizontalScrollBar().setUnitIncrement(24);
-        tableScrollPane.getViewport().setBackground(Color.WHITE);
+        studentTableScrollPane = new JScrollPane(f.resultTable);
+        studentTableScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_ALWAYS);
+        studentTableScrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+        studentTableScrollPane.getHorizontalScrollBar().setUnitIncrement(24);
+        studentTableScrollPane.getViewport().setBackground(Color.WHITE);
 
-        // Remove the empty grey area to the right of Review Status.
-        // The last column expands when there is spare viewport space, but returns to
-        // its normal width when horizontal scrolling is needed.
-        final int lastColumnBaseWidth = 120;
-
-        tableScrollPane.getViewport().addComponentListener(new java.awt.event.ComponentAdapter() {
+        // Keep the rightmost meaningful result column attached to the split divider.
+        // Java stretches Review Status; Python stretches Total (Generated Total is hidden).
+        studentTableScrollPane.getViewport().addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override
             public void componentResized(java.awt.event.ComponentEvent e) {
-                SwingUtilities.invokeLater(() -> {
-                    int columnCount = f.resultTable.getColumnCount();
-                    if (columnCount == 0) return;
-
-                    int viewportWidth = tableScrollPane.getViewport().getWidth();
-                    int otherColumnsWidth = 0;
-
-                    for (int i = 0; i < columnCount - 1; i++) {
-                        otherColumnsWidth +=
-                                f.resultTable.getColumnModel()
-                                        .getColumn(i)
-                                        .getWidth();
-                    }
-
-                    TableColumn lastColumn =
-                            f.resultTable.getColumnModel()
-                                    .getColumn(columnCount - 1);
-
-                    int newWidth =
-                            Math.max(
-                                    lastColumnBaseWidth,
-                                    viewportWidth - otherColumnsWidth
-                            );
-
-                    lastColumn.setPreferredWidth(newWidth);
-                    lastColumn.setWidth(newWidth);
-                });
+                SwingUtilities.invokeLater(MainFrameLayout.this::stretchEndColumnToViewport);
             }
         });
-        studentTablePanel.add(tableScrollPane, BorderLayout.CENTER);
+        studentTablePanel.add(studentTableScrollPane, BorderLayout.CENTER);
 
         // Student details
         f.detailsArea.setEditable(false);
@@ -328,6 +301,15 @@ final class MainFrameLayout {
         submissionsSplitPane.setContinuousLayout(true);
         submissionsSplitPane.setOneTouchExpandable(true);
 
+        // In Python mode the last visible column is Total. Keep it attached to
+        // the split divider so dragging the divider right expands Total, just
+        // like Review Status does in Java mode.
+        submissionsSplitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> {
+            if (pythonLayout) {
+                SwingUtilities.invokeLater(this::stretchEndColumnToViewport);
+            }
+        });
+
         panel.add(submissionsSplitPane, BorderLayout.CENTER);
         return panel;
     }
@@ -335,6 +317,7 @@ final class MainFrameLayout {
     /** Adjust the submissions/details split for the selected assessment mode. */
     void applyAssessmentModeLayout(boolean pythonMode) {
         if (submissionsSplitPane == null) return;
+        pythonLayout = pythonMode;
 
         if (pythonMode) {
             // Python only shows columns through Total. Keep the left side close to
@@ -354,6 +337,7 @@ final class MainFrameLayout {
                 int rightMinimum = submissionDetailsPanel.getMinimumSize().width;
                 int maxLeft = Math.max(360, available - rightMinimum - submissionsSplitPane.getDividerSize());
                 submissionsSplitPane.setDividerLocation(Math.min(tableWidth, maxLeft));
+                SwingUtilities.invokeLater(this::stretchEndColumnToViewport);
             });
         } else {
             studentTablePanel.setMinimumSize(new Dimension(480, 0));
@@ -361,6 +345,48 @@ final class MainFrameLayout {
             submissionsSplitPane.setResizeWeight(0.67);
             SwingUtilities.invokeLater(() -> submissionsSplitPane.setDividerLocation(0.67));
         }
+    }
+
+    /**
+     * Fill spare table width with the last meaningful result column.
+     * In Python mode model column 6 (Generated Total) is hidden at width 0,
+     * so Total is model column 5 and must be stretched explicitly.
+     */
+    private void stretchEndColumnToViewport() {
+        if (studentTableScrollPane == null) return;
+
+        int viewportWidth = studentTableScrollPane.getViewport().getWidth();
+        if (viewportWidth <= 0) return;
+
+        int targetViewIndex;
+        int baseWidth;
+
+        if (pythonLayout) {
+            // Python's last meaningful visible column is model column 5: Total.
+            targetViewIndex = f.resultTable.convertColumnIndexToView(5);
+            baseWidth = 100;
+        } else {
+            // Java's final column is model column 8: Review Status.
+            targetViewIndex = f.resultTable.convertColumnIndexToView(8);
+            baseWidth = 120;
+        }
+
+        if (targetViewIndex < 0) return;
+
+        int otherColumnsWidth = 0;
+        for (int i = 0; i < f.resultTable.getColumnModel().getColumnCount(); i++) {
+            if (i != targetViewIndex) {
+                otherColumnsWidth += f.resultTable.getColumnModel().getColumn(i).getWidth();
+            }
+        }
+
+        TableColumn endColumn = f.resultTable.getColumnModel().getColumn(targetViewIndex);
+        int newWidth = Math.max(baseWidth, viewportWidth - otherColumnsWidth);
+
+        endColumn.setPreferredWidth(newWidth);
+        endColumn.setWidth(newWidth);
+        f.resultTable.revalidate();
+        f.resultTable.repaint();
     }
 
     private void setColumnWidth(int index, int preferredWidth, int minWidth) {
