@@ -466,6 +466,10 @@ AutoGradingSystem/
 │       └── testers/
 │
 ├── submissions/
+│   ├── java/
+│   │   ├── original/
+│   │   └── batch100/
+│   └── python/
 ├── generated_testers/
 ├── edgecases/
 ├── workspace/
