@@ -51,7 +51,7 @@ Supports:
 - manual score adjustment
 - CSV and PDF export
 
-#### IS1704 — Python
+#### IS1704 - Python
 
 Supports:
 
@@ -144,7 +144,7 @@ Detailed information for an individual student is shown in the GUI without chang
 
 ---
 
-## Template Submission Detector — Bonus Feature
+## Template Submission Detector - Bonus Feature
 
 Java submissions are compared with the original assessment template before header correction.
 
@@ -212,7 +212,7 @@ The official Java result is shown as **Original Total**.
 
 ---
 
-## Parameterized Tester Generation — Bonus Feature
+## Parameterized Tester Generation - Bonus Feature
 
 Additional Java testers can be generated from configurable CSV test data.
 
@@ -258,7 +258,7 @@ Generated results are displayed separately as **Generated Total** and are intend
 
 ---
 
-## Edge Case Testing — Bonus Feature
+## Edge Case Testing - Bonus Feature
 
 Additional Java edge-case tests are stored in:
 
@@ -272,7 +272,7 @@ Edge-case results do not change the official score. They can be included in the 
 
 ---
 
-## Java Plagiarism Similarity Check — Bonus Feature
+## Java Plagiarism Similarity Check - Bonus Feature
 
 Java validation also runs a similarity check using the original student ZIP submissions.
 
@@ -576,7 +576,7 @@ Run the scripts from the project root so the assessment, library, workspace, and
 
 # How to Use
 
-### Step 1 — Select assessment mode
+### Step 1 - Select assessment mode
 
 Choose either:
 
@@ -590,33 +590,37 @@ or:
 IS1704 - Python
 ```
 
-### Step 2 — Select submissions
+### Step 2 - Select submissions
 
 Java mode defaults to: submissions/java/original/
 Python mode defaults to: submissions/python/
 
 For demonstration purposes, 10 sample ZIP submissions are provided in submissions/java/demo/, consisting of:
 
-- 6 original submissions provided from project details: 2023-2024-chee.teo.2022.zip
-2023-2024-david.2024.zip
-2023-2024-fen.lai.2022.zip
-2023-2024-jing.lim.2021.zip
-2023-2024-ping.lee.2023.zip
-2023-2024-xing.yan.2023.zip
+- **6 Original Submissions**
+  - `2023-2024-chee.teo.2022.zip`
+  - `2023-2024-david.2024.zip`
+  - `2023-2024-fen.lai.2022.zip`
+  - `2023-2024-jing.lim.2021.zip`
+  - `2023-2024-ping.lee.2023.zip`
+  - `2023-2024-xing.yan.2023.zip`
 
-- Plagiarism/Similarity Detection (2 files)
-2023-2024-partchan.2023.zip
-2023-2024-kimjong.2023.zip
+- **Plagiarism / Similarity Detection - 2 submissions**
+  - `2023-2024-partchan.2023.zip`
+  - `2023-2024-kimjong.2023.zip`
 
-- Template Detection (1 file)
-2023-2024-kimjun.2023.zip
+- **Template Detection - 1 submission**
+  - `2023-2024-kimjun.2023.zip`
 
-- From the 100 additional generated test submissions (1 file)
-2023-2024-ophelia.lim.2026.zip
+- **Generated Batch Sample - 1 submission**
+  - `2023-2024-ophelia.lim.2026.zip`
+  - Selected from the 100 additional generated test submissions
 
-Use Browse to select another submissions folder when needed, such as: submissions/java/batch100/
+To test a different batch, use **Browse** and select another submissions folder, for example:
 
-### Step 3 — Validate
+`submissions/java/batch100/`
+
+### Step 3 - Validate
 
 Click:
 
@@ -626,7 +630,7 @@ Click:
 
 Review the validation summary, student table, Correction Summary, Full Details, and System Log.
 
-### Step 4 — Grade
+### Step 4 - Grade
 
 For Java:
 
@@ -640,7 +644,7 @@ For Python:
 Start Python Grading
 ```
 
-### Step 5 — Java optional checks
+### Step 5 - Java optional checks
 
 Java mode also provides:
 
@@ -652,7 +656,7 @@ Review Issues
 Manual Score (Optional)
 ```
 
-### Step 6 — Export
+### Step 6 - Export
 
 Click:
 
@@ -715,6 +719,6 @@ Implemented functionality includes:
 - detailed PDF report generation
 
 
-Future Improvements
+Future Improvements:
 
 Future improvements could include implementing more robust Python grading with fallback scoring mechanisms to recover partial marks when test execution fails. The system could also be extended to automatically check weekly In-Class Exercises (ICE) and homework submissions for both Java and Python, reducing instructors' marking workload. Additionally, plagiarism detection could be enhanced with more advanced code similarity analysis to improve accuracy and reduce false positives.
