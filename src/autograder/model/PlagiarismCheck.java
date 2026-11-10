@@ -201,7 +201,7 @@ public final class PlagiarismCheck {
     private static boolean isStarterBody(List<String> body) {
         if (body.isEmpty()) return true;
         String code = String.join("", body);
-        return Set.of("return;", "returnnull;", "return0;", "return0.0;",
+        return Set.of("return;", "returnnull;", "return0;", "return-1;", "return0.0;",
                 "returnfalse;", "return\"\";", "thrownewUnsupportedOperationException();").contains(code)
                 || code.matches("returnnew(?:ArrayList|LinkedList|HashSet|HashMap)(?:<[^;]*>)?\\(\\);");
     }
