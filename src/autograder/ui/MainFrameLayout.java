@@ -7,6 +7,9 @@ import java.awt.*;
 
 final class MainFrameLayout {
     private final MainFrame f;
+    private JSplitPane submissionsSplitPane;
+    private JPanel studentTablePanel;
+    private JPanel submissionDetailsPanel;
 
     MainFrameLayout(MainFrame frame) { this.f = frame; }
 
@@ -253,11 +256,13 @@ final class MainFrameLayout {
             setColumnWidth(5, 120, 100); // Total
         }
 
-        JPanel tablePanel = new JPanel(new BorderLayout());
-        tablePanel.setBorder(BorderFactory.createTitledBorder("Students"));
+        studentTablePanel = new JPanel(new BorderLayout());
+        studentTablePanel.setBorder(BorderFactory.createTitledBorder("Students"));
         JScrollPane tableScrollPane = new JScrollPane(f.resultTable);
         tableScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_ALWAYS);
         tableScrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+        tableScrollPane.getHorizontalScrollBar().setUnitIncrement(24);
+        tableScrollPane.getViewport().setBackground(Color.WHITE);
 
         // Remove the empty grey area to the right of Review Status.
         // The last column expands when there is spare viewport space, but returns to
@@ -296,33 +301,66 @@ final class MainFrameLayout {
                 });
             }
         });
-        tablePanel.add(tableScrollPane, BorderLayout.CENTER);
+        studentTablePanel.add(tableScrollPane, BorderLayout.CENTER);
 
         // Student details
         f.detailsArea.setEditable(false);
         f.detailsArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         f.detailsArea.setText("Select a student to view submission details.");
 
-        JPanel detailsPanel = new JPanel(new BorderLayout());
-        detailsPanel.setBorder(BorderFactory.createTitledBorder("Submission Details"));
+        submissionDetailsPanel = new JPanel(new BorderLayout());
+        submissionDetailsPanel.setBorder(BorderFactory.createTitledBorder("Submission Details"));
 
         JTabbedPane detailsTabs = new JTabbedPane();
         detailsTabs.addTab("Correction Summary", f.correctionPanel.createCorrectionPanel());
         detailsTabs.addTab("Full Details", new JScrollPane(f.detailsArea));
-        detailsPanel.add(detailsTabs, BorderLayout.CENTER);
+        submissionDetailsPanel.add(detailsTabs, BorderLayout.CENTER);
 
-        // Keep both panes usable on smaller windows.
-        tablePanel.setMinimumSize(new Dimension(480, 0));
-        detailsPanel.setMinimumSize(new Dimension(300, 0));
+        // Java starts with the wider results table. Python adjusts this split
+        // after Java-only columns are hidden so the details panel gets more room.
+        studentTablePanel.setMinimumSize(new Dimension(480, 0));
+        submissionDetailsPanel.setMinimumSize(new Dimension(300, 0));
 
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tablePanel, detailsPanel);
-        splitPane.setResizeWeight(0.67);
-        splitPane.setDividerLocation(0.67);
-        splitPane.setContinuousLayout(true);
-        splitPane.setOneTouchExpandable(true);
+        submissionsSplitPane = new JSplitPane(
+                JSplitPane.HORIZONTAL_SPLIT, studentTablePanel, submissionDetailsPanel);
+        submissionsSplitPane.setResizeWeight(0.67);
+        submissionsSplitPane.setDividerLocation(0.67);
+        submissionsSplitPane.setContinuousLayout(true);
+        submissionsSplitPane.setOneTouchExpandable(true);
 
-        panel.add(splitPane, BorderLayout.CENTER);
+        panel.add(submissionsSplitPane, BorderLayout.CENTER);
         return panel;
+    }
+
+    /** Adjust the submissions/details split for the selected assessment mode. */
+    void applyAssessmentModeLayout(boolean pythonMode) {
+        if (submissionsSplitPane == null) return;
+
+        if (pythonMode) {
+            // Python only shows columns through Total. Keep the left side close to
+            // the table's actual width and give all extra window space to details.
+            studentTablePanel.setMinimumSize(new Dimension(360, 0));
+            submissionDetailsPanel.setMinimumSize(new Dimension(360, 0));
+            submissionsSplitPane.setResizeWeight(0.0);
+
+            SwingUtilities.invokeLater(() -> {
+                int tableWidth = 28; // border + scrollbar allowance
+                for (int i = 0; i < f.resultTable.getColumnModel().getColumnCount(); i++) {
+                    TableColumn column = f.resultTable.getColumnModel().getColumn(i);
+                    tableWidth += column.getPreferredWidth();
+                }
+
+                int available = submissionsSplitPane.getWidth();
+                int rightMinimum = submissionDetailsPanel.getMinimumSize().width;
+                int maxLeft = Math.max(360, available - rightMinimum - submissionsSplitPane.getDividerSize());
+                submissionsSplitPane.setDividerLocation(Math.min(tableWidth, maxLeft));
+            });
+        } else {
+            studentTablePanel.setMinimumSize(new Dimension(480, 0));
+            submissionDetailsPanel.setMinimumSize(new Dimension(300, 0));
+            submissionsSplitPane.setResizeWeight(0.67);
+            SwingUtilities.invokeLater(() -> submissionsSplitPane.setDividerLocation(0.67));
+        }
     }
 
     private void setColumnWidth(int index, int preferredWidth, int minWidth) {

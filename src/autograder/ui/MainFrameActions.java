@@ -102,6 +102,7 @@ final class MainFrameActions {
         }
 
         f.results.updatePlagiarismColumn();
+        f.layout.applyAssessmentModeLayout(python);
         f.uiState.setControlsEnabled(true);
         f.revalidate();
         f.repaint();
