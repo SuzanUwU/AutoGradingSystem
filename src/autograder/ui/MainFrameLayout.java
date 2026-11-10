@@ -157,11 +157,15 @@ final class MainFrameLayout {
 
     void applyStatusColors() {
         DefaultTableCellRenderer statusRenderer = createStatusRenderer();
-        f.resultTable.getColumnModel().getColumn(1).setCellRenderer(statusRenderer);
-        f.resultTable.getColumnModel().getColumn(2).setCellRenderer(statusRenderer);
-        f.resultTable.getColumnModel().getColumn(3).setCellRenderer(statusRenderer);
-        f.resultTable.getColumnModel().getColumn(7).setCellRenderer(statusRenderer);
-        f.resultTable.getColumnModel().getColumn(8).setCellRenderer(statusRenderer);
+        int columnCount = f.resultTable.getColumnCount();
+
+        if (columnCount > 1) f.resultTable.getColumnModel().getColumn(1).setCellRenderer(statusRenderer);
+        if (columnCount > 2) f.resultTable.getColumnModel().getColumn(2).setCellRenderer(statusRenderer);
+        if (columnCount > 3) f.resultTable.getColumnModel().getColumn(3).setCellRenderer(statusRenderer);
+
+        // Java-only columns
+        if (columnCount > 7) f.resultTable.getColumnModel().getColumn(7).setCellRenderer(statusRenderer);
+        if (columnCount > 8) f.resultTable.getColumnModel().getColumn(8).setCellRenderer(statusRenderer);
 
         DefaultTableCellRenderer gradingRenderer = new DefaultTableCellRenderer() {
             @Override
@@ -175,14 +179,16 @@ final class MainFrameLayout {
                 return label;
             }
         };
-        f.resultTable.getColumnModel().getColumn(4).setCellRenderer(gradingRenderer);
+        if (columnCount > 4) f.resultTable.getColumnModel().getColumn(4).setCellRenderer(gradingRenderer);
 
         DefaultTableCellRenderer centeredRenderer = new DefaultTableCellRenderer();
         centeredRenderer.setHorizontalAlignment(JLabel.CENTER);
-        f.resultTable.getColumnModel().getColumn(5).setCellRenderer(centeredRenderer);
-        f.resultTable.getColumnModel().getColumn(6).setCellRenderer(centeredRenderer);
+        if (columnCount > 5) f.resultTable.getColumnModel().getColumn(5).setCellRenderer(centeredRenderer);
+        if (columnCount > 6) f.resultTable.getColumnModel().getColumn(6).setCellRenderer(centeredRenderer);
 
-        f.correctionTable.getColumnModel().getColumn(7).setCellRenderer(createStatusRenderer());
+        if (f.correctionTable.getColumnModel().getColumnCount() > 7) {
+            f.correctionTable.getColumnModel().getColumn(7).setCellRenderer(createStatusRenderer());
+        }
     }
 
     // =====================================================
@@ -220,21 +226,32 @@ final class MainFrameLayout {
         f.resultTable.setFont(f.resultTable.getFont().deriveFont(11f));
         f.resultTable.getTableHeader().setFont(f.resultTable.getTableHeader().getFont().deriveFont(Font.BOLD, 11f));
 
-        setColumnWidth(0, 135, 115); // Student
-        setColumnWidth(1, 88, 78);   // Structure
-        setColumnWidth(2, 84, 74);   // Headers
-        setColumnWidth(3, 82, 72);   // Status
-        setColumnWidth(4, 88, 78);   // Grading
-        setColumnWidth(5, 108, 98);  // Original Total
-        setColumnWidth(6, 118, 108); // Generated Total
-        setColumnWidth(7, 122, 110); // Plagiarism Check
-        setColumnWidth(8, 135, 120); // Review Status
+        int columnCount = f.resultTable.getColumnCount();
 
-        // Keep full, readable headers.
-        f.resultTable.getColumnModel().getColumn(5).setHeaderValue("Original Total");
-        f.resultTable.getColumnModel().getColumn(6).setHeaderValue("Generated Total");
-        f.resultTable.getColumnModel().getColumn(7).setHeaderValue("Plagiarism Check");
-        f.resultTable.getColumnModel().getColumn(8).setHeaderValue("Review Status");
+        if (columnCount >= 9) {
+            setColumnWidth(0, 135, 115); // Student
+            setColumnWidth(1, 88, 78);   // Structure
+            setColumnWidth(2, 84, 74);   // Headers
+            setColumnWidth(3, 82, 72);   // Status
+            setColumnWidth(4, 88, 78);   // Grading
+            setColumnWidth(5, 108, 98);  // Original Total
+            setColumnWidth(6, 118, 108); // Generated Total
+            setColumnWidth(7, 122, 110); // Plagiarism Check
+            setColumnWidth(8, 135, 120); // Review Status
+
+            // Keep full, readable headers.
+            f.resultTable.getColumnModel().getColumn(5).setHeaderValue("Original Total");
+            f.resultTable.getColumnModel().getColumn(6).setHeaderValue("Generated Total");
+            f.resultTable.getColumnModel().getColumn(7).setHeaderValue("Plagiarism Check");
+            f.resultTable.getColumnModel().getColumn(8).setHeaderValue("Review Status");
+        } else if (columnCount >= 6) {
+            setColumnWidth(0, 150, 120); // Student
+            setColumnWidth(1, 100, 80);  // Structure
+            setColumnWidth(2, 100, 80);  // Headers
+            setColumnWidth(3, 100, 80);  // Status
+            setColumnWidth(4, 110, 90);  // Grading
+            setColumnWidth(5, 120, 100); // Total
+        }
 
         JPanel tablePanel = new JPanel(new BorderLayout());
         tablePanel.setBorder(BorderFactory.createTitledBorder("Students"));
@@ -245,17 +262,38 @@ final class MainFrameLayout {
         // Remove the empty grey area to the right of Review Status.
         // The last column expands when there is spare viewport space, but returns to
         // its normal width when horizontal scrolling is needed.
-        final int reviewStatusBaseWidth = 135;
+        final int lastColumnBaseWidth = 120;
+
         tableScrollPane.getViewport().addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override
             public void componentResized(java.awt.event.ComponentEvent e) {
-                int viewportWidth = tableScrollPane.getViewport().getWidth();
-                int otherColumnsWidth = 0;
-                for (int i = 0; i < f.resultTable.getColumnCount() - 1; i++) {
-                    otherColumnsWidth += f.resultTable.getColumnModel().getColumn(i).getPreferredWidth();
-                }
-                TableColumn lastColumn = f.resultTable.getColumnModel().getColumn(8);
-                lastColumn.setPreferredWidth(Math.max(reviewStatusBaseWidth, viewportWidth - otherColumnsWidth));
+                SwingUtilities.invokeLater(() -> {
+                    int columnCount = f.resultTable.getColumnCount();
+                    if (columnCount == 0) return;
+
+                    int viewportWidth = tableScrollPane.getViewport().getWidth();
+                    int otherColumnsWidth = 0;
+
+                    for (int i = 0; i < columnCount - 1; i++) {
+                        otherColumnsWidth +=
+                                f.resultTable.getColumnModel()
+                                        .getColumn(i)
+                                        .getWidth();
+                    }
+
+                    TableColumn lastColumn =
+                            f.resultTable.getColumnModel()
+                                    .getColumn(columnCount - 1);
+
+                    int newWidth =
+                            Math.max(
+                                    lastColumnBaseWidth,
+                                    viewportWidth - otherColumnsWidth
+                            );
+
+                    lastColumn.setPreferredWidth(newWidth);
+                    lastColumn.setWidth(newWidth);
+                });
             }
         });
         tablePanel.add(tableScrollPane, BorderLayout.CENTER);

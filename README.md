@@ -63,8 +63,6 @@ Supports:
 - Python grading using the assessment test suite
 - CSV and PDF export
 
-Python validation does **not** silently modify student answers or identity information. Only eligible ZIP folder layouts are normalized into a corrected copy.
-
 ---
 
 ## Submission Validation
@@ -103,8 +101,6 @@ Recoverable structure and header problems are corrected only in the extracted wo
 - Name and Email ID headers
 - unchanged starter implementations
 - unexpected files and other anomalies
-
-When safe, an incorrect Python ZIP folder hierarchy can be normalized into:
 
 ```text
 workspace/python/
@@ -599,6 +595,25 @@ IS1704 - Python
 Java mode defaults to: submissions/java/original/
 Python mode defaults to: submissions/python/
 
+For demonstration purposes, 10 sample ZIP submissions are provided in submissions/java/demo/, consisting of:
+
+- 6 original submissions provided from project details: 2023-2024-chee.teo.2022.zip
+2023-2024-david.2024.zip
+2023-2024-fen.lai.2022.zip
+2023-2024-jing.lim.2021.zip
+2023-2024-ping.lee.2023.zip
+2023-2024-xing.yan.2023.zip
+
+- Plagiarism/Similarity Detection (2 files)
+2023-2024-partchan.2023.zip
+2023-2024-kimjong.2023.zip
+
+- Template Detection (1 file)
+2023-2024-kimjun.2023.zip
+
+- From the 100 additional generated test submissions (1 file)
+2023-2024-ophelia.lim.2026.zip
+
 Use Browse to select another submissions folder when needed, such as: submissions/java/batch100/
 
 ### Step 3 — Validate
@@ -677,13 +692,6 @@ and choose the destination for the official CSV. The detailed PDF is created bes
 
 ---
 
-## Module
-
-**CS102 — Programming Fundamentals II**  
-Singapore Management University
-
----
-
 ## Current Project Status
 
 The current system supports an end-to-end Java grading workflow and a Python assessment workflow through the same desktop application.
@@ -707,4 +715,6 @@ Implemented functionality includes:
 - detailed PDF report generation
 
 
-Further improvements may focus on extending assessment support and improving automation and usability.
+Future Improvements
+
+Future improvements could include implementing more robust Python grading with fallback scoring mechanisms to recover partial marks when test execution fails. The system could also be extended to automatically check weekly In-Class Exercises (ICE) and homework submissions for both Java and Python, reducing instructors' marking workload. Additionally, plagiarism detection could be enhanced with more advanced code similarity analysis to improve accuracy and reduce false positives.
