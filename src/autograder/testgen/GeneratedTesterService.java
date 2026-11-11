@@ -1,5 +1,7 @@
 package autograder.testgen;
 
+// AI-assisted development using ChatGPT; reviewed and modified by the team.
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;

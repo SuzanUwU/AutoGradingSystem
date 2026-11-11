@@ -1,5 +1,7 @@
 package autograder.ui;
 
+// AI-assisted development using ChatGPT; reviewed and modified by the team.
+
 import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableColumn;

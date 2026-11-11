@@ -1,5 +1,7 @@
 package autograder.reporting;
 
+// AI-assisted development using ChatGPT; reviewed and modified by the team.
+
 import autograder.grading.EdgeCaseRunner;
 import autograder.model.QuestionResult;
 import autograder.model.StudentResult;
@@ -435,7 +437,7 @@ public class PdfReportExporter {
                 for (int i = 0; i < widths.length; i++) {
                     String value = i < row.length && row[i] != null ? row[i] : "";
 
-                    // Keep the existing table design, but colour status cells like the GUI.
+                    // Keep the existing table design, but colour status cells same as the GUI.
                     Color background = alternate ? LIGHT_GRAY : WHITE;
                     Color textColor = DARK;
 

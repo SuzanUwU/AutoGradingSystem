@@ -1,5 +1,7 @@
 package autograder.ui;
 
+// AI-assisted development using ChatGPT; reviewed and modified by the team.
+
 import javax.swing.*; // Swing components used to build the graphical user interface.
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
@@ -340,3 +342,4 @@ public class MainFrame extends JFrame {
         // Main.java then calls frame.setVisible(true) to display the completed window.
     }
 }
+
