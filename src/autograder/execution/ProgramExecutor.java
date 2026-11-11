@@ -1,5 +1,7 @@
 package autograder.execution;
 
+// AI-assisted development using ChatGPT; reviewed and modified by the team.
+
 import autograder.compilation.QuestionWorkspace;
 import autograder.model.ExecutionResult;
 import autograder.model.QuestionSpec;
